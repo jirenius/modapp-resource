@@ -1,0 +1,26 @@
+{
+  "name": "modapp-resource",
+  "version": "1.0.0",
+  "description": "Utility classes implementing modapp's resource interfaces for Models and Collections.",
+  "main": "./index.js",
+  "scripts": {
+    "build": "babel src --out-dir ./",
+    "test": "jest --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jirenius/modapp-resource"
+  },
+  "author": "Samuel Jirénius <samuel@jirenius.se>",
+  "license": "MIT",
+  "homepage": "https://github.com/jirenius/modapp-resource",
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^1.6.1",
+    "jest": "^22.3.0"
+  },
+  "dependencies": {
+    "modapp": "^2.1.2",
+    "modapp-utils": "^1.0.1"
+  }
+}
