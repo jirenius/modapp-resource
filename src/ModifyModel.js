@@ -93,7 +93,7 @@ class ModifyModel {
 				if (this[k] === v || typeof v === 'undefined') {
 					delete this._modification[k];
 				} else {
-					this._modification[k] = v;
+					this._modification[k] = this[k];
 				}
 			}
 		}
@@ -115,9 +115,9 @@ class ModifyModel {
 		}
 
 		if (on) {
-			this.model.on('change', this._onModelChange);
+			this._model.on('change', this._onModelChange);
 		} else {
-			this.model.off('change', this._onModelChange);
+			this._model.off('change', this._onModelChange);
 		}
 	}
 
