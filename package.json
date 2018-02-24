@@ -1,6 +1,6 @@
 {
   "name": "modapp-resource",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Utility classes implementing modapp's resource interfaces for Models and Collections.",
   "main": "./index.js",
   "scripts": {
@@ -17,10 +17,9 @@
   "devDependencies": {
     "babel-cli": "^6.26.0",
     "babel-preset-env": "^1.6.1",
-    "jest": "^22.3.0"
+    "jest": "^22.4.2"
   },
   "dependencies": {
-    "modapp": "^2.1.2",
     "modapp-utils": "^1.0.1"
   }
 }
