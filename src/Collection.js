@@ -90,7 +90,7 @@ class Collection {
 
 		// Emit event if an item was removed
 		if (idx >= 0) {
-			this._eventBus.emit(this, this._namespace + '.remove', {item: item, idx: idx});
+			this._eventBus.emit(this, this._namespace + '.remove', { item: item, idx: idx });
 		}
 
 		return idx;
@@ -110,7 +110,7 @@ class Collection {
 	 * Invalid if the collection has a compare function.
 	 * @param {string} id Id of the item
 	 * @param {*} idx Index to move the item to
-	 * @returns {number} Order index of the item before moving. -1 if the item id doesn't exist.
+	 * returns {number} Order index of the item before moving. -1 if the item id doesn't exist.
 	 */
 	move(id, idx) {
 		if (this.compare) throw "Cannot use move in list with compare";
@@ -148,7 +148,7 @@ class Collection {
 
 		idx = this._map.add(this._idAttribute(item), item, idx);
 		if (emit) {
-			this._eventBus.emit(this, this._namespace + '.add', {item: item, idx: idx});
+			this._eventBus.emit(this, this._namespace + '.add', { item: item, idx: idx });
 		}
 		return idx;
 	}

@@ -143,6 +143,8 @@ class ModifyModel {
 
 	/**
 	 * Updates the properties.
+	 * @param {object} props Properties to update.
+	 * @returns {?object} Key/value object with the change properties and old values, or null if there were no changes.
 	 * @private
 	 */
 	_update(props) {
@@ -157,7 +159,7 @@ class ModifyModel {
 			for (let key in props) {
 				if (key &&
 					props.hasOwnProperty(key) &&
-					key.substr(0,1) !== '_' &&
+					key.substr(0, 1) !== '_' &&
 					(this.hasOwnProperty(key) || !this[key])
 				) {
 					if (props[key] !== this[key]) {
@@ -185,7 +187,7 @@ class ModifyModel {
 		for (let key in this) {
 			if (key &&
 				this.hasOwnProperty(key) &&
-				key.substr(0,1) !== '_'
+				key.substr(0, 1) !== '_'
 			) {
 				props[key] = this[key];
 			}

@@ -63,6 +63,9 @@ class Model {
 
 	/**
 	 * Updates the properties.
+	 * @param {object} props Properties to update.
+	 * @param {boolean} emit Flag if changes though be emitted on the eventBus.
+	 * @returns {?object} Key/value object with the change properties and old values, or null if there were no changes.
 	 * @private
 	 */
 	_update(props, emit) {
@@ -77,7 +80,7 @@ class Model {
 			for (let key in props) {
 				if (key &&
 					props.hasOwnProperty(key) &&
-					key.substr(0,1) !== '_' &&
+					key.substr(0, 1) !== '_' &&
 					(this.hasOwnProperty(key) || !this[key])
 				) {
 					if (props[key] !== this[key]) {
@@ -109,7 +112,7 @@ class Model {
 		for (let key in this) {
 			if (key &&
 				this.hasOwnProperty(key) &&
-				key.substr(0,1) !== '_'
+				key.substr(0, 1) !== '_'
 			) {
 				props[key] = this[key];
 			}

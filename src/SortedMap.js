@@ -21,17 +21,17 @@ export default function(compare) {
 	 * @returns {number} Index of insert position
 	 */
 	list.add = function(key, value, idx) {
-		if( map[key] ) throw "Map key ["+key+"] already exists";
+		if (map[key]) throw "Map key [" + key + "] already exists";
 
 		map[key] = value;
 
-		if( compare ) {
+		if (compare) {
 			idx = array.binaryInsert(list, value, compare, true);
 		} else {
-			if( typeof idx != 'number' || idx >= list.length ) {
+			if (typeof idx != 'number' || idx >= list.length) {
 				idx = list.length;
 				list.push(value);
-			} else if( idx <= 0 ) {
+			} else if (idx <= 0) {
 				idx = 0;
 				list.unshift(value);
 			} else {
@@ -77,7 +77,7 @@ export default function(compare) {
 	/**
 	 * Retrieves the order index of a value in the map
 	 * @param {string} key Key of value to get index for
-	 * @retuns {number} Index of value position. -1 if key doesn't exist
+	 * @returns {number} Index of value position. -1 if key doesn't exist
 	 */
 	list.indexOfKey = function(key) {
 		var value = map[key];

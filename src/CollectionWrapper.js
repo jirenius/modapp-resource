@@ -151,8 +151,8 @@ class CollectionWrapper {
 
 	_wrapModel(m, item) {
 		return this._filter
-			? {m: m, f: this._filter(item)}
-			: {m: m};
+			? { m: m, f: this._filter(item) }
+			: { m: m };
 	}
 
 	_setEventListeners(on) {
@@ -170,7 +170,7 @@ class CollectionWrapper {
 	}
 
 	_binarySearch(m) {
-		return array.binarySearch(this._list, {m}, (a, b) => this._compare(a.m, b.m));
+		return array.binarySearch(this._list, { m }, (a, b) => this._compare(a.m, b.m));
 	}
 
 	_onChange(changed, item) {
@@ -341,7 +341,7 @@ class CollectionWrapper {
 		let i = 0;
 		let arr = this._list;
 		let len = this._list.length;
-		let done = {done: true};
+		let done = { done: true };
 
 		if (this._filter) {
 			return {
@@ -365,7 +365,7 @@ class CollectionWrapper {
 		return {
 			next: function () {
 				return i < len
-					? {value: arr[i++].m, done: false}
+					? { value: arr[i++].m, done: false }
 					: done;
 			}
 		};
