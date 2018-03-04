@@ -18,11 +18,10 @@ yarn add modapp-resource
 ## Usage
 
 ```javascript
-import eventBus from 'modapp/eventBus';
 import Model from 'modapp-resource/Model';
 
 // Creating generic model
-let model = new Model(eventBus, 'example.model', {
+let model = new Model({
 	data: {
 		id: 12,
 		foo: "bar"

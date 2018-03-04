@@ -1,40 +1,35 @@
+import eventBus from 'modapp/eventBus';
 import * as array from 'modapp-utils/array';
 import * as obj from 'modapp-utils/obj';
 
 /**
- * A wrapper for a collection, exposing the underlaying data but can provide
- * a different sort order, mapping of models, or filtering of models.
+ * A wrapper for a {@link module:modapp~Collection},
+ * exposing the underlaying data but can provide a different sort order,
+ * mapping of models, or filtering of models.
  * It will transparently propagate emitted add and remove events.
+ * @implements {module:modapp~Collection}
  */
-class ModelCollection {
+class CollectionWrapper {
 
 	/**
-	 * Creates an ModelCollection instance.
-	 * @param {module:modapp~EventBus} eventBus Event bus.
-	 * @param {string} namespace Event bus namespace.
+	 * Creates an CollectionWrapper instance.
+	 * @param {object} collection Collection object to wrap.
 	 * @param {object} [opt] Optional parameters.
 	 * @param {function} [opt.map] Model map callback. If not provided, model objects will be stored as is.
 	 * @param {function} [opt.filter] Model filter callback. Parameter is a model of the underlying collection.
 	 * @param {function} [opt.compare] Sort compare function.
+	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'collectionWrapper'.
+	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 */
-	constructor(collection, eventBus, namespace, opt = {}) {
+	constructor(collection, opt = {}) {
 		this._collection = collection;
-		this._eventBus = eventBus;
-		this._namespace = namespace;
 
 		obj.update(this, opt, {
-			filter: {
-				type: '?function',
-				property: '_filter'
-			},
-			map: {
-				type: '?function',
-				property: '_map'
-			},
-			compare: {
-				type: '?function',
-				property: '_compare'
-			}
+			filter: { type: '?function', property: '_filter' },
+			map: { type: '?function', property: '_map' },
+			compare: { type: '?function', property: '_compare' },
+			namespace: { type: 'string', default: 'collectionWrapper', property: '_namespace' },
+			eventBus: { type: 'object', default: eventBus, property: '_eventBus' }
 		});
 
 		if (this._map && (this._filter || this._compare)) {
@@ -377,4 +372,4 @@ class ModelCollection {
 	}
 }
 
-export default ModelCollection;
+export default CollectionWrapper;

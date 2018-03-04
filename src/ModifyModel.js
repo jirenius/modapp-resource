@@ -1,29 +1,32 @@
+import eventBus from 'modapp/eventBus';
 import * as obj from 'modapp-utils/obj';
 
 /**
- * ModifyModel wraps another object or model and sets its own properties to the match.
+ * ModifyModel wraps another object or a {@link module:modapp~Model},
+ * and sets its own properties to the match.
  * Any property modification that will cause a difference between the models will set the additional
  * property "isModified" to be true.
  * It also listens to changed in the underlying model. If a non-modified property is changed,
  * the ModifyModel will update its own property.
  * Because ModifyModel listens to the underlying model, it needs to be disposed when not used anymore.
+ * @implements {module:modapp~Model}
  */
 class ModifyModel {
 
 	/**
 	 * Creates a ModifyModel instance
 	 * @param {object|Model} model Model object to wrap.
-	 * @param {module:modapp~EventBus} eventBus Event bus.
-	 * @param {string} namespace Event bus namespace.
-	 * @param {object} [opt] Optional parameters
+	 * @param {object} [opt] Optional parameters.
 	 * @param {object} [opt.definition] Object definition. If not provided, any value will be allowed.
+	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'modifyModel'.
+	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 */
-	constructor(model, eventBus, namespace, opt = {}) {
+	constructor(model, opt = {}) {
 		this._model = model;
 		this._modification = {};
 
-		this._eventBus = eventBus;
-		this._namespace = namespace;
+		this._eventBus = opt.eventBus || eventBus;
+		this._namespace = opt.namespace || 'modifyModel';
 		this._definition = opt.definition || null;
 		this._modProp = opt.isModifiedProperty || 'isModified';
 

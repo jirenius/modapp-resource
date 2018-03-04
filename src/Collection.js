@@ -1,35 +1,37 @@
 import SortedMap from './SortedMap';
+import eventBus from 'modapp/eventBus';
 import * as obj from 'modapp-utils/obj';
 
 /**
- * Collection wraps a SortedMap and implements the {@link interface/CollectionInterface}
- * @module class/Collection
+ * Collection is a generic data collection.
+ * @implements {module:modapp~Collection}
  */
 class Collection {
 
 	/**
-	 * @constructor
-	 * @param {module:modapp~EventBus} eventBus EventBus object used for passing events
-	 * @param {string} namespace Event namespace to use.
-	 * @param {object} [opt] Optional settings
-	 * @param {Array.<object>} [opt.data] Collection data array
+	 * Creates a Collection instance
+	 * @param {object} [opt] Optional settings.
+	 * @param {Array.<object>} [opt.data] Collection data array.
 	 * @param {function} [opt.compare] Compare function for sort order. Defaults to insert order.
 	 * @param {function} [opt.modelFactory] Model factory function. Defaults to using added objects as is.
 	 * @param {function} [opt.idAttribute] Id attribute callback function. Defaults to returning the object.id property.
-	 * @alias module:class/Collection
+	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'collection'.
+	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 */
-	constructor(eventBus, namespace, opt) {
+	constructor(opt) {
 		opt = obj.copy(opt, {
 			compare: { type: '?function' },
 			modelFactory: { type: '?function' },
 			idAttribute: { type: 'function', default: m => m.id },
-			data: { type: '?object' }
+			data: { type: '?object' },
+			namespace: { type: 'string', default: 'collection' },
+			eventBus: { type: 'object', default: eventBus }
 		});
 
-		this._eventBus = eventBus;
-		this._namespace = namespace;
 		this._modelFactory = opt.modelFactory;
 		this._idAttribute = opt.idAttribute;
+		this._namespace = opt.namespace;
+		this._eventBus = opt.eventBus;
 
 		this._map = new SortedMap(opt.compare);
 

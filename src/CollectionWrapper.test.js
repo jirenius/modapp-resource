@@ -1,4 +1,3 @@
-import eventBus from 'modapp/eventBus';
 import Model from './Model';
 import ModelCollection from './Collection';
 import CollectionWrapper from './CollectionWrapper';
@@ -12,8 +11,8 @@ describe("CollectionWrapper", () => {
 	jest.useFakeTimers();
 
 	beforeEach(() => {
-		collection = new ModelCollection(eventBus, 'collection', {
-			modelFactory: item => new Model(eventBus, 'model', {data: item}),
+		collection = new ModelCollection({
+			modelFactory: item => new Model({data: item}),
 			data: [
 				{id: 10, fruit: 'banana'},
 				{id: 20, fruit: 'pineapple'},
@@ -35,12 +34,12 @@ describe("CollectionWrapper", () => {
 
 	describe("map", () => {
 		it("returns mapped underlying collection without filter", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper');
+			wrapper = new CollectionWrapper(collection);
 			expect(wrapper.map(m => m.fruit)).toEqual(['banana', 'pineapple', 'orange', 'apple']);
 		});
 
 		it("adds new model to collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper');
+			wrapper = new CollectionWrapper(collection);
 
 			let idx;
 			wrapper.on('add', e => idx = e.idx);
@@ -51,7 +50,7 @@ describe("CollectionWrapper", () => {
 		});
 
 		it("removes model from collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper');
+			wrapper = new CollectionWrapper(collection);
 			wrapper.on('remove', getIdx);
 			collection.remove(20);
 			jest.runAllTimers();
@@ -62,14 +61,14 @@ describe("CollectionWrapper", () => {
 
 	describe("opt.compare", () => {
 		it("propagates a sorted collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				compare: (a, b) => a.fruit.localeCompare(b.fruit)
 			});
 			expect(wrapper.map(m => m.fruit)).toEqual(['apple', 'banana', 'orange', 'pineapple']);
 		});
 
 		it("adds new model in sorted collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				compare: (a, b) => a.fruit.localeCompare(b.fruit)
 			});
 			wrapper.on('add', getIdx);
@@ -80,7 +79,7 @@ describe("CollectionWrapper", () => {
 		});
 
 		it("removes model from sorted collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				compare: (a, b) => a.fruit.localeCompare(b.fruit)
 			});
 			wrapper.on('remove', getIdx);
@@ -93,14 +92,14 @@ describe("CollectionWrapper", () => {
 
 	describe("opt.filter", () => {
 		it("propagates a filtered collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
 			expect(wrapper.map(m => m.fruit)).toEqual(['banana', 'orange', 'apple']);
 		});
 
 		it("adds new model in filtered collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
 			wrapper.on('add', getIdx);
@@ -111,7 +110,7 @@ describe("CollectionWrapper", () => {
 		});
 
 		it("removes model from filtered collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
 			wrapper.on('remove', getIdx);
@@ -122,7 +121,7 @@ describe("CollectionWrapper", () => {
 		});
 
 		it("does not trigger event on adding filtered model to collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
 			wrapper.on('add', getIdx);
@@ -133,7 +132,7 @@ describe("CollectionWrapper", () => {
 		});
 
 		it("does not trigger event on removing filtered model from collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
 			wrapper.on('remove', getIdx);
@@ -144,7 +143,7 @@ describe("CollectionWrapper", () => {
 		});
 
 		it("adds filtered model in on model change", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
 			wrapper.on('add', getIdx);
@@ -158,7 +157,7 @@ describe("CollectionWrapper", () => {
 
 	describe("opt.map", () => {
 		it("propagates a mapped collection", () => {
-			wrapper = new CollectionWrapper(collection, eventBus, 'wrapper', {
+			wrapper = new CollectionWrapper(collection, {
 				map: m => ({id: m.id, fruit: m.fruit.toUpperCase()})
 			});
 			expect(wrapper.map(m => m.fruit)).toEqual(['BANANA', 'PINEAPPLE', 'ORANGE', 'APPLE']);

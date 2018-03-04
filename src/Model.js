@@ -1,22 +1,24 @@
+import eventBus from 'modapp/eventBus';
 import * as obj from 'modapp-utils/obj';
 
 /**
- * Model implements the {@link interface/Model} interface.
+ * Model is a generic data model.
+ * @implements {module:modapp~Model}
  */
 class Model {
 
 	/**
 	 * Creates a Model instance
-	 * @param {module:modapp~EventBus} eventBus Event bus.
-	 * @param {string} namespace Event bus namespace.
-	 * @param {object} [opt] Optional parameters
+	 * @param {object} [opt] Optional parameters.
 	 * @param {object} [opt.definition] Object definition. If not provided, any value will be allowed.
 	 * @param {object} [opt.data] Initial data.
+	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'model'.
+	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 */
-	constructor(eventBus, namespace, opt = {}) {
-		this._eventBus = eventBus;
-		this._namespace = namespace;
+	constructor(opt = {}) {
 		this._definition = opt.definition || null;
+		this._namespace = opt.namespace || 'model';
+		this._eventBus = opt.eventBus || eventBus;
 
 		if (opt.data) {
 			this._update(opt.data, false);
