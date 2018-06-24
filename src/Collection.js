@@ -1,5 +1,5 @@
 import SortedMap from './SortedMap';
-import eventBus from 'modapp/eventBus';
+import { eventBus } from 'modapp';
 import * as obj from 'modapp-utils/obj';
 
 /**
