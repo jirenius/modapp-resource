@@ -1,6 +1,6 @@
 import SortedMap from './SortedMap';
 import { eventBus } from 'modapp';
-import * as obj from 'modapp-utils/obj';
+import { obj } from 'modapp-utils';
 
 /**
  * Collection is a generic data collection.

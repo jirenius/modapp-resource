@@ -1,4 +1,4 @@
-import * as array from 'modapp-utils/array';
+import { array } from 'modapp-utils';
 
 /**
  * A map is an ordered list for key-value items. The map also allows for value lookup
