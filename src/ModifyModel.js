@@ -1,5 +1,5 @@
 import { eventBus } from 'modapp';
-import * as obj from 'modapp-utils/obj';
+import { obj } from 'modapp-utils';
 
 /**
  * ModifyModel wraps another object or a {@link module:modapp~Model},

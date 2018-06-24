@@ -1,6 +1,5 @@
 import { eventBus } from 'modapp';
-import * as array from 'modapp-utils/array';
-import * as obj from 'modapp-utils/obj';
+import { array, obj } from 'modapp-utils';
 
 /**
  * A wrapper for a {@link module:modapp~Collection},
