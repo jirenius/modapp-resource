@@ -18,7 +18,7 @@ yarn add modapp-resource
 ## Usage
 
 ```javascript
-import Model from 'modapp-resource/Model';
+import { Model } from 'modapp-resource';
 
 // Creating generic model
 let model = new Model({

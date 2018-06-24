@@ -1,4 +1,4 @@
-import eventBus from 'modapp/eventBus';
+import { eventBus } from 'modapp';
 import * as array from 'modapp-utils/array';
 import * as obj from 'modapp-utils/obj';
 
