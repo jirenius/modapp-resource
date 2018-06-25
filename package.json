@@ -1,6 +1,6 @@
 {
   "name": "modapp-resource",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Utility classes implementing modapp's resource interfaces for Models and Collections.",
   "main": "lib/index.js",
   "module": "es/index.js",
@@ -45,7 +45,7 @@
     "rollup-plugin-uglify": "^4.0.0"
   },
   "dependencies": {
-    "modapp": "^2.3.0",
-    "modapp-utils": "^1.2.0"
+    "modapp": "^2.3.2",
+    "modapp-utils": "^1.2.1"
   }
 }
