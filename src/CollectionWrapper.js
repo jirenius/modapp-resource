@@ -2,10 +2,10 @@ import { eventBus } from 'modapp';
 import { array, obj } from 'modapp-utils';
 
 /**
- * A wrapper for a {@link module:modapp~Collection},
- * exposing the underlaying data but can provide a different sort order,
- * mapping of models, or filtering of models.
- * It will transparently propagate emitted add and remove events.
+ * A wrapper for a {@link module:modapp~Collection}, exposing the underlaying
+ * data but can provide a different sort order, mapping of items, filtering of
+ * items, or slicing of the collection. It will transparently propagate emitted
+ * add and remove events.
  * @implements {module:modapp~Collection}
  */
 class CollectionWrapper {
@@ -14,8 +14,10 @@ class CollectionWrapper {
 	 * Creates an CollectionWrapper instance.
 	 * @param {object} collection Collection object to wrap.
 	 * @param {object} [opt] Optional parameters.
-	 * @param {function} [opt.map] Model map callback. If not provided, model objects will be stored as is.
-	 * @param {function} [opt.filter] Model filter callback. Parameter is a model of the underlying collection.
+	 * @param {function} [opt.map] Model map callback. If not provided, item objects will be stored as is.
+	 * @param {function} [opt.filter] Model filter callback. Parameter is a item of the underlying collection.
+	 * @param {number} [opt.begin] Zero-based index at which to begin extraction, similar to Array.slice.
+	 * @param {?number} [opt.end] Zero-based index before which to end extraction, similar to Array.slice. Null extracts until the end of the collection.
 	 * @param {function} [opt.compare] Sort compare function.
 	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'collectionWrapper'.
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
@@ -24,14 +26,16 @@ class CollectionWrapper {
 		this._collection = collection;
 
 		obj.update(this, opt, {
-			filter: { type: '?function', property: '_filter' },
 			map: { type: '?function', property: '_map' },
+			filter: { type: '?function', property: '_filter' },
+			begin: { type: 'number', default: 0, property: '_begin' },
+			end: { type: '?number', property: '_end' },
 			compare: { type: '?function', property: '_compare' },
 			namespace: { type: 'string', default: 'collectionWrapper', property: '_namespace' },
 			eventBus: { type: 'object', default: eventBus, property: '_eventBus' }
 		});
 
-		if (this._map && (this._filter || this._compare)) {
+		if (this._map) {
 			this._weakMap = new WeakMap();
 		}
 
@@ -48,31 +52,81 @@ class CollectionWrapper {
 
 	_initList() {
 		this._list = [];
+		this._len = 0;
 
 		let getModel = this._map
-			? item => this._map(item, this._collection)
+			? item => {
+				let m = this._map(item, this._collection);
+				this._weakMap.set(item, m);
+				return m;
+			}
 			: item => item;
-		let setWeakMap = this._weakMap
-			? (item, m) => this._weakMap.set(item, m)
-			: () => {};
 		let add = this._filter
 			? (item, m) => {
 				if (item.on) {
 					item.on('change', this._onChange);
 				}
-				this._list.push(this._wrapModel(m, item));
+				let c = this._wrapModel(m, item);
+				if (c.f) this._len++;
+				this._list.push(c);
 			}
-			: (item, m) => this._list.push(this._wrapModel(m, item));
+			: (item, m) => {
+				this._list.push(this._wrapModel(m, item));
+				this._len++;
+			};
 
 		for (let item of this._collection) {
 			let m = getModel(item);
-			setWeakMap(item, m);
 			add(item, m);
 		}
 
 		if (this._compare) {
 			this._list.sort((a, b) => this._compare(a.m, b.m));
 		}
+	}
+
+	/**
+	 * Length of the collection.
+	 */
+	get length() {
+		let s = this._beginIdx();
+		let e = this._endIdx();
+		return s > e ? 0 : e - s;
+	}
+
+	toJSON() {
+		return this._array().map(m => m.toJSON ? m.toJSON() : m);
+	}
+
+	/**
+	 * Returns an array of the collection items.
+	 * @returns {Array.<*>} An array of items.
+	 */
+	toArray() {
+		return this._array();
+	}
+
+	/**
+	 * Creates an array filled with all array elements that pass a test.
+	 *
+	 * Short hand for CollectionWrapper.toArray().map(filter).
+	 * @param {function} filter Filter predicate function.
+	 * @returns {Array} A new array with the elements that pass the test.
+	 */
+	filter(filter) {
+		return this._array().filter(filter);
+	}
+
+	/**
+	 * Creates a new array populated with the results of calling a provided
+	 * function on every element in the calling array.
+	 *
+	 * Short hand for CollectionWrapper.toArray().map(callback)
+	 * @param {function} callback Function that is called for every item of the collection.
+	 * @returns {Array} A new array with each element being the result of the callback function.
+	 */
+	map(callback) {
+		return this._array().map(callback);
 	}
 
 	/**
@@ -93,59 +147,127 @@ class CollectionWrapper {
 		this._eventBus.off(this, events, handler, this._namespace);
 	}
 
+	/**
+	 * Returns the item at a given index, or undefined if the index is out of bounds.
+	 * @param {number} idx Zero-based index.
+	 * @returns {*} Item located at the given index.
+	 */
 	atIndex(idx) {
-		let cont = this._list[idx];
-		return cont ? cont.m : undefined;
-	}
+		let s = this._beginIdx();
+		let e = this._endIdx();
+		// Check out of bounds
+		if (idx < 0 || idx >= e - s) return undefined;
 
-	indexOf(model) {
-		let idx = -1;
+		// Set idx to the filtered internal index
+		idx += s;
 		if (this._filter) {
-			for (let cont of this._list) {
-				if (cont.f) {
-					idx++;
-					if (cont.m === model) {
-						return idx;
+			// Find the idx:th item
+			for (let c of this._list) {
+				if (c.f) {
+					if (!idx) {
+						return c.m;
 					}
-				} else {
-					if (cont.m === model) {
-						return -1;
-					}
-				}
-			}
-			return -1;
-		} else {
-			for (let cont of this._list) {
-				idx++;
-				if (cont.m === model) {
-					return idx;
+					idx--;
 				}
 			}
 		}
+
+		return this._list[idx].m;
 	}
 
-	get length() {
-		return this._filter
-			? this._list.filter(cont => cont.f).length
-			: this._list.length;
+	/**
+	 * Returns a zero-based index value of an item in the collection.
+	 * @param {*} item Collection item.
+	 * @returns {number} Zero-based index of the item, or -1 if the item is not found.
+	 */
+	indexOf(item) {
+		let s = this._beginIdx();
+		let e = this._endIdx();
+		if (e > s) {
+			if (this._filter) {
+				let i = 0;
+				for (let c of this._list) {
+					if (c.f) {
+						if (c.m === item) {
+							return i >= s ? i - s : -1;
+						}
+						i++;
+						if (i >= e) break;
+					} else {
+						if (c.m === item) {
+							return -1;
+						}
+					}
+				}
+			} else {
+				for (let i = s; i < e; i++) {
+					if (this._list[i].m === item) {
+						return i - s;
+					}
+				}
+			}
+		}
+		return -1;
 	}
 
-	filter(filter) {
-		return this._filter
-			? this._list.filter(cont => cont.f && filter(cont.m))
-			: this._list.filter(cont => filter(cont.m));
+	_fIndexOf(item) {
+		let fi = 0;
+		for (let i = 0; i < this._list.length; i++) {
+			let c = this._list[i];
+			if (c.m === item) {
+				return { cont: c, idx: i, fidx: fi };
+			}
+			if (c.f) fi++;
+		}
+		return { cont: null, idx: -1, fidx: -1 };
 	}
 
-	map(filter) {
-		return this._filter
-			? this._list.filter(cont => cont.f).map(cont => filter(cont.m))
-			: this._list.map(cont => filter(cont.m));
+	_atFIndex(fidx) {
+		if (this._filter) {
+			// Find the fidx:th item
+			for (let c of this._list) {
+				if (c.f) {
+					if (!fidx) {
+						return c.m;
+					}
+					fidx--;
+				}
+			}
+		}
+		return this._list[fidx].m;
 	}
 
-	toJSON() {
-		return this._filter
-			? this._list.filter(cont => cont.f).map(cont => cont.m.toJSON ? cont.m.toJSON() : cont.m)
-			: this._list.map(cont => cont.m.toJSON ? cont.m.toJSON() : cont.m);
+	// Returns the begin index based of the filtered internal list.
+	// Optionally with the length to calculate from.
+	_beginIdx(l) {
+		if (l === undefined) l = this._len;
+		let o = this._begin;
+		return o < 0
+			? Math.max(0, l + o)
+			: Math.min(l, o); 
+	}
+
+	// Returns the end index based of the filtered internal list.
+	// Optionally with the length to calculate from.
+	_endIdx(l) {
+		if (l === undefined) l = this._len;
+		let o = this._end;
+		if (o === null) return l;
+		return o < 0
+			? Math.max(0, l + o)
+			: Math.min(l, o);
+	}
+
+	_array() {
+		let arr = this._filter
+			? this._list.filter(c => c.f)
+			: this._list;
+		let s = this._beginIdx();
+		let e = this._endIdx();
+		if (s == 0 && e == this._len) {
+			return arr.map(c => c.m);
+		}
+		return arr.slice(s, e).map(c => c.m);
 	}
 
 	_wrapModel(m, item) {
@@ -172,57 +294,121 @@ class CollectionWrapper {
 		return array.binarySearch(this._list, { m }, (a, b) => this._compare(a.m, b.m));
 	}
 
-	_onChange(changed, item) {
+	_onChange(_, item) {
 		let m = this._weakMap
 			? this._weakMap.get(item)
 			: item;
 
-		let idx, cont, emitIdx = 0;
-		if (this._compare) {
-			idx = this._binarySearch(m);
-			cont = this._list[idx];
-		} else {
-			let len = this._list.length;
-			for (idx = 0; idx < len; idx++) {
-				let c = this._list[idx];
-				if (c.m === m) {
-					cont = this._list[idx];
-					break;
-				}
-				if (c.f) {
-					emitIdx++;
-				}
-			}
-			if (!cont) {
-				return;
-			}
+		// With a compare function, we could speed this up with
+		// a binary search, and fall back on using _fIndexOf.
+		// But to simplify, we just use _fIndexOf for now.
+		let { cont, fidx } = this._fIndexOf(m);
+		if (!cont) {
+			return;
 		}
 
 		let f = this._filter(item);
+		// Quick exit if filter didn't change
 		if (f === cont.f) {
 			return;
 		}
 
-
+		cont.f = f;
 		if (f) {
-			cont.f = true;
-			if (this._compare) {
-				emitIdx = this.indexOf(m);
-			}
-			this._eventBus.emit(this, this._namespace + '.add', {
-				item: cont.m,
-				idx: emitIdx
-			});
+			this._len++;
+			this._trySendAdd(cont.m, fidx);
 		} else {
-			if (this._compare) {
-				emitIdx = this.indexOf(m);
-			}
-			cont.f = false;
-			this._eventBus.emit(this, this._namespace + '.remove', {
-				item: cont.m,
-				idx: emitIdx
-			});
+			this._len--;
+			this._trySendRemove(cont.m, fidx);
 		}
+	}
+
+	_trySendAdd(m, i) {
+		let l = this._len;
+		let cur_s = this._beginIdx(l);
+		let pre_s = this._beginIdx(l - 1);
+		let cur_e = this._endIdx(l);
+		let pre_e = this._endIdx(l - 1);
+
+		// Quick escape
+		if (pre_s >= pre_e && cur_s >= cur_e) {
+			return;
+		}
+
+		if (cur_s > pre_s) {
+			if (i >= cur_s) {
+				this._sendRemove(this._atFIndex(pre_s), 0);
+			}
+		} else {
+			if (i < cur_s) {
+				this._sendAdd(this._atFIndex(cur_s), 0);
+			}
+		}
+
+		if (i >= cur_s && i < cur_e) {
+			this._sendAdd(m, i - cur_s);
+		}
+
+		if (cur_e > pre_e) {
+			if (i >= cur_e) {
+				this._sendAdd(this._atFIndex(cur_e - 1), cur_e - cur_s - 1);
+			}
+		} else {
+			if (i < cur_e) {
+				this._sendRemove(this._atFIndex(cur_e), cur_e - cur_s);
+			}
+		}
+	}
+
+	_trySendRemove(m, i) {
+		let l = this._len;
+		let cur_s = this._beginIdx(l);
+		let pre_s = this._beginIdx(l + 1);
+		let cur_e = this._endIdx(l);
+		let pre_e = this._endIdx(l + 1);
+
+		// Quick escape
+		if (pre_s >= pre_e && cur_s >= cur_e) {
+			return;
+		}
+
+		if (cur_e < pre_e) {
+			if (i >= pre_e) {
+				this._sendRemove(this._atFIndex(pre_e - 1), pre_e - pre_s - 1);
+			}
+		} else {
+			if (i < pre_e) {
+				this._sendAdd(this._atFIndex(pre_e - 1), pre_e - pre_s);
+			}
+		}
+
+		if (i >= pre_s && i < pre_e) {
+			this._sendRemove(m, i - pre_s);
+		}
+
+		if (cur_s < pre_s) {
+			if (i > cur_s) {
+				this._sendAdd(this._atFIndex(cur_s), 0);
+			}
+		} else {
+			if (i < cur_s) {
+				this._sendRemove(this._atFIndex(cur_s - 1), 0);
+			}
+		}
+	}
+
+	_sendAdd(item, idx) {
+		this._eventBus.emit(this, this._namespace + '.add', {
+			item,
+			idx
+		});
+	}
+
+	_sendRemove(item, idx) {
+		this._eventBus.emit(this, this._namespace + '.remove', {
+			item,
+			idx
+		});
 	}
 
 	_onAdd(e) {
@@ -230,19 +416,12 @@ class CollectionWrapper {
 			return;
 		}
 
-		let m, idx;
-
-		if (this._map && this._compare) {
-			m = this._map(e.item, this._collection);
-			idx = this._binarySearch(m);
-		} else {
-			m = this._map
-				? this._map(e.item, this._collection)
-				: e.item;
-			idx = this._compare
-				? this._binarySearch(m)
-				: e.idx;
-		}
+		let m = this._map
+			? this._map(e.item, this._collection)
+			: e.item;
+		let idx = this._compare
+			? this._binarySearch(m)
+			: e.idx;
 
 		if (this._weakMap) {
 			this._weakMap.set(e.item, m);
@@ -250,7 +429,7 @@ class CollectionWrapper {
 
 		if (idx < 0) {
 			// If idx < 0, the value contains the bitwise compliment of where the
-			// model would fit.
+			// item would fit.
 			idx = ~idx;
 		}
 
@@ -265,13 +444,12 @@ class CollectionWrapper {
 			if (!cont.f) {
 				return;
 			}
-			idx = this.indexOf(m);
+			let r = this._fIndexOf(m);
+			idx = r.fidx;
 		}
 
-		this._eventBus.emit(this, this._namespace + '.add', {
-			item: m,
-			idx: idx
-		});
+		this._len++;
+		this._trySendAdd(m, idx);
 	}
 
 	_onRemove(e) {
@@ -279,50 +457,38 @@ class CollectionWrapper {
 			return;
 		}
 
-		let cont, m, idx;
+		let m = this._weakMap && this._compare
+			? this._weakMap.get(e.item)
+			: e.item;
+		let idx = this._compare
+			? this._binarySearch(m)
+			: e.idx;
 
-		if (this._map && this._compare) {
-			m = this._weakMap.get(e.item);
-			if (!m) {
-				throw "Removed item not in WeakMap";
-			}
-			idx = this._binarySearch(m);
-			cont = this._list[idx];
-		} else if (this._map) {
-			idx = e.idx;
-			cont = this._list[idx];
-		} else {
-			idx = this._compare
-				? this._binarySearch(e.item)
-				: e.idx;
-			cont = this._list[idx];
-		}
+		let cont = this._list[idx];
 
 		if (this._weakMap) {
 			this._weakMap.delete(e.item);
 		}
 
-		let emitIdx = idx;
-
+		let fidx = idx;
 		if (this._filter) {
 			if (e.item.on) {
 				e.item.off('change', this._onChange);
 			}
-
+			// Quick exit if a filtered item was removed.
 			if (!cont.f) {
-				this._list.splice(idx, 1);
+				return this._list.splice(idx, 1);
+			}
+			let r = this._fIndexOf(m);
+			if (!r.cont) {
 				return;
 			}
-
-			emitIdx = this.indexOf(cont.m);
+			fidx = r.fidx;
 		}
 
 		this._list.splice(idx, 1);
-
-		this._eventBus.emit(this, this._namespace + '.remove', {
-			item: cont.m,
-			idx: emitIdx
-		});
+		this._len--;
+		this._trySendRemove(m, fidx);
 	}
 
 	dispose() {
