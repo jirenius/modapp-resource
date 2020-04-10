@@ -19,7 +19,8 @@ describe("CollectionWrapper", () => {
 			10: { id: 10, fruit: 'banana' },
 			20: { id: 20, fruit: 'pineapple' },
 			30:	{ id: 30, fruit: 'orange' },
-			40:	{ id: 40, fruit: 'apple' }
+			40:	{ id: 40, fruit: 'apple' },
+			50:	{ id: 50, fruit: 'kiwi' }
 		};
 		collection = new ModelCollection({
 			modelFactory: item => new Model({ data: item }),
@@ -72,6 +73,95 @@ describe("CollectionWrapper", () => {
 		});
 	});
 
+	describe("filter", () => {
+		it("returns filtered item set", () => {
+			wrapper = new CollectionWrapper(collection);
+			expect(wrapper.filter(m => m.fruit.length <= 6).map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple' ]);
+		});
+	});
+
+	describe("atIndex", () => {
+		it("returns the item found at index", () => {
+			wrapper = new CollectionWrapper(collection);
+			expect(wrapper.atIndex(2)).toMatchObject(items[30]);
+		});
+
+		it("returns undefined when index is out of bounds", () => {
+			wrapper = new CollectionWrapper(collection);
+			expect(wrapper.atIndex(-1)).toBe(undefined);
+			expect(wrapper.atIndex(collection.length)).toBe(undefined);
+		});
+
+		it("returns undefined when index is out of bounds of sliced collection", () => {
+			wrapper = new CollectionWrapper(collection, {
+				begin: 1,
+				end: -1
+			});
+			expect(wrapper.atIndex(-1)).toBe(undefined);
+			expect(wrapper.atIndex(collection.length - 2)).toBe(undefined);
+		});
+
+		it("returns the item found at index with filter", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			expect(wrapper.atIndex(2)).toMatchObject(items[40]);
+		});
+	});
+
+	describe("indexOf", () => {
+		it("returns the index of item in collection", () => {
+			wrapper = new CollectionWrapper(collection);
+			expect(wrapper.indexOf(collection.atIndex(2))).toBe(2);
+		});
+
+		it("returns the index of item in sliced collection", () => {
+			wrapper = new CollectionWrapper(collection, {
+				begin: 1,
+				end: -1
+			});
+			expect(wrapper.indexOf(collection.atIndex(1))).toBe(0);
+			expect(wrapper.indexOf(collection.atIndex(2))).toBe(1);
+		});
+
+		it("returns -1 when item is not in the collection", () => {
+			wrapper = new CollectionWrapper(collection);
+			expect(wrapper.indexOf(items[50])).toBe(-1);
+		});
+
+		it("returns -1 when item is not included in sliced collection", () => {
+			wrapper = new CollectionWrapper(collection, {
+				begin: 1,
+				end: -1
+			});
+			expect(wrapper.indexOf(collection.atIndex(0))).toBe(-1);
+			expect(wrapper.indexOf(collection.atIndex(3))).toBe(-1);
+		});
+
+		it("returns the index of item in filtered collection", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			expect(wrapper.indexOf(collection.atIndex(0))).toBe(0);
+			expect(wrapper.indexOf(collection.atIndex(2))).toBe(1);
+			expect(wrapper.indexOf(collection.atIndex(3))).toBe(2);
+		});
+
+		it("returns -1 when item is excluded from filtered collection", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			expect(wrapper.indexOf(collection.atIndex(1))).toBe(-1);
+		});
+
+		it("returns -1 when item is not in a filtered collection", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			expect(wrapper.indexOf(items[50])).toBe(-1);
+		});
+	});
+
 	describe("opt.compare", () => {
 		it("propagates a sorted collection", () => {
 			wrapper = new CollectionWrapper(collection, {
@@ -116,7 +206,7 @@ describe("CollectionWrapper", () => {
 				filter: m => m.fruit.length <= 6
 			});
 			wrapper.on('add', getIdx);
-			collection.add({ id: 50, fruit: 'kiwi' });
+			collection.add(items[50]);
 			jest.runAllTimers();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple', 'kiwi' ]);
 			expect(idx).toBe(3);
@@ -422,6 +512,7 @@ describe("CollectionWrapper", () => {
 			jest.runAllTimers();
 			try {
 				expect(wrapper.map(m => m.fruit)).toEqual(expected);
+				expect(wrapper.length).toEqual(expected.length);
 				for (let e of recordedEvents) {
 					switch (e.event) {
 						case 'add':
@@ -576,6 +667,7 @@ describe("CollectionWrapper", () => {
 			jest.runAllTimers();
 			try {
 				expect(wrapper.map(m => m.fruit)).toEqual(expected);
+				expect(wrapper.length).toEqual(expected.length);
 				for (let e of recordedEvents) {
 					switch (e.event) {
 						case 'add':
@@ -597,43 +689,27 @@ describe("CollectionWrapper", () => {
 		});
 	});
 
-	it("tries to do things", () => {
-		// [ 'banana', 'pineapple', 'orange', 'apple' ]
-		let args = [ -3, -2, 0, [ 'pineapple' ]];
-
-		let begin = args[0];
-		let end = args[1];
-		let idx = args[2];
-		let expected = args[3];
-
-		wrapper = new CollectionWrapper(collection, {
-			begin,
-			end
-		});
-		wrapper.on('add', eventRecorder('add'));
-		wrapper.on('remove', eventRecorder('remove'));
-		let arr = wrapper.toArray();
-		collection.remove(collection.atIndex(idx).id);
-		jest.runAllTimers();
-		try {
-			expect(wrapper.map(m => m.fruit)).toEqual(expected);
-			for (let e of recordedEvents) {
-				switch (e.event) {
-					case 'add':
-						expect(e.idx >= 0 && e.idx <= arr.length).toBe(true);
-						arr.splice(e.idx, 0, e.item);
-						break;
-					case 'remove':
-						expect(e.idx >= 0 && e.idx < arr.length).toBe(true);
-						expect(e.item.fruit).toBe(arr[e.idx].fruit);
-						arr.splice(e.idx, 1);
-						break;
-				}
+	describe("iterator", () => {
+		it("iterates over each item in collection", () => {
+			wrapper = new CollectionWrapper(collection);
+			let arr = wrapper.toArray();
+			for (let item of wrapper) {
+				let expected = arr.shift();
+				expect(item).toBe(expected);
 			}
-			expect(arr.map(m => m.fruit)).toEqual(expected);
-		} catch (err) {
-			err.message = `${err.message}\n\nevents:\n\t${JSON.stringify(recordedEvents.map(e => ({ event: e.event, idx: e.idx, fruit: e.item.fruit })), null, 2)}`;
-			throw err;
-		}
+			expect(arr.length).toBe(0);
+		});
+
+		it("iterates over each item in filtered collection", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			let arr = wrapper.toArray();
+			for (let item of wrapper) {
+				let expected = arr.shift();
+				expect(item).toBe(expected);
+			}
+			expect(arr.length).toBe(0);
+		});
 	});
 });

@@ -244,7 +244,7 @@ class CollectionWrapper {
 		let o = this._begin;
 		return o < 0
 			? Math.max(0, l + o)
-			: Math.min(l, o); 
+			: Math.min(l, o);
 	}
 
 	// Returns the end index based of the filtered internal list.
@@ -504,6 +504,7 @@ class CollectionWrapper {
 
 	[Symbol.iterator]() {
 		let i = 0;
+		let a;
 		let arr = this._list;
 		let len = this._list.length;
 		let done = { done: true };
