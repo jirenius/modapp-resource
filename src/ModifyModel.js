@@ -1,14 +1,18 @@
-import { eventBus } from 'modapp';
+import eventBus from 'modapp-eventbus';
 import { obj } from 'modapp-utils';
 
 /**
- * ModifyModel wraps another object or a {@link module:modapp~Model},
- * and sets its own properties to the match.
- * Any property modification that will cause a difference between the models will set the additional
- * property "isModified" to be true.
- * It also listens to changed in the underlying model. If a non-modified property is changed,
- * the ModifyModel will update its own property.
- * Because ModifyModel listens to the underlying model, it needs to be disposed when not used anymore.
+ * ModifyModel wraps another object or a {@link module:modapp~Model}, and sets
+ * its own properties to the match.
+ *
+ * Any property modification that will cause a difference between the models
+ * will set the additional property "isModified" to be true.
+ *
+ * It also listens to changed in the underlying model. If a non-modified
+ * property is changed, the ModifyModel will update its own property.
+ *
+ * Because ModifyModel listens to the underlying model, it needs to be disposed
+ * when not used anymore.
  * @implements {module:modapp~Model}
  */
 class ModifyModel {
@@ -19,7 +23,10 @@ class ModifyModel {
 	 * @param {object} [opt] Optional parameters.
 	 * @param {object} [opt.definition] Object definition. If not provided, any value will be allowed.
 	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'modifyModel'.
+	 * @param {object} [opt.isModifiedProperty] Property used to flag if model is modified. Defaults to 'isModified'.
+	 * @param {object} [opt.props] Properties to set initially.
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
+	 * @param {boolean} [opt.modifiedOnNew] [opt.modifiedOnNew] Flag telling if model is considered modified on new properties not existing on the wrapped model. Defaults to false.
 	 */
 	constructor(model, opt = {}) {
 		this._model = model;
@@ -29,13 +36,18 @@ class ModifyModel {
 		this._namespace = opt.namespace || 'modifyModel';
 		this._definition = opt.definition || null;
 		this._modProp = opt.isModifiedProperty || 'isModified';
+		this._modifiedOnNew = !!opt.modifiedOnNew;
 
-		let changed = this._update(model);
-		this._setIsModified(changed);
+		this._setIsModified(this._update(model));
+		if (opt.props) {
+			this._setIsModified(this._update(opt.props));
+		}
+
+		this._onCount = 0;
+		this._timeout = null;
 
 		// Bind callbacks
 		this._onModelChange = this._onModelChange.bind(this);
-
 		this._setEventListener(true);
 	}
 
@@ -75,6 +87,27 @@ class ModifyModel {
 	}
 
 	/**
+	 * Resets a single or all model properties to the underlying model, clearing
+	 * any modifications. If any property where changed or is missing, this will
+	 * trigger a change event.
+	 * @param {string} [prop] Optional property to reset. Defaults to resetting all properties.
+	 * @returns {Promise} Promise to the setting of the properties.
+	 */
+	reset(prop) {
+		let o = {};
+		if (prop) {
+			if (this._modifications.hasOwnProperty[prop]) {
+				o[prop] = this._model[prop];
+			}
+		} else {
+			for (let k in this._modification) {
+				o[k] = this._model[k];
+			}
+		}
+		return this.set(o);
+	}
+
+	/**
 	 * Get the modifications in ModifyModel in comparison to the underlying model object.
 	 * @returns {?object} Key/value object with modified properties and their new value. Null if there are no modifications.
 	 */
@@ -93,7 +126,7 @@ class ModifyModel {
 			let v;
 			for (let k in changed) {
 				v = this._model[k];
-				if (this[k] === v || typeof v === 'undefined') {
+				if (this[k] === v || (!this._modifiedOnNew && typeof v == 'undefined')) {
 					delete this._modification[k];
 				} else {
 					this._modification[k] = this[k];
@@ -125,6 +158,8 @@ class ModifyModel {
 	}
 
 	_onModelChange(changed) {
+		if (!this._model) return;
+
 		let props, old;
 		for (let k in changed) {
 			old = changed[k];
@@ -165,7 +200,7 @@ class ModifyModel {
 					if (props[key] !== this[key]) {
 						changed = changed || {};
 						changed[key] = this[key];
-						if (props[key] === undefined) {
+						if (typeof props[key] == 'undefined') {
 							delete this[key];
 						} else {
 							this[key] = props[key];

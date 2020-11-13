@@ -1,31 +1,21 @@
-import babel from 'rollup-plugin-babel';
+import babel from '@rollup/plugin-babel';
 import resolve from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
 import { terser } from 'rollup-plugin-terser';
 
 export default {
 	input: 'src/index.js',
+	external: [ 'modapp-eventbus' ],
 	output: {
-		format: 'umd',
 		name: 'modapp-resource',
+		format: 'umd',
 		exports: 'named',
 		globals: {
-			modapp: 'modapp'
+			'modapp-eventbus': 'modapp-eventbus'
 		}
 	},
-	external: [ 'modapp' ],
 	plugins: [
-		resolve({
-			mainFields: [ 'jsnext:main', 'main', 'browser' ]
-		}),
-		babel({
-			exclude: 'node_modules/**'
-		}),
-		commonjs(),
-		(process.env.NODE_ENV === 'production' && terser({
-			mangle: {
-				properties: { regex: /^_/ },
-			}
-		})),
-	],
+		babel({ babelHelpers: 'bundled' }),
+		resolve(),
+		(process.env.NODE_ENV === 'production' && terser()),
+	]
 };

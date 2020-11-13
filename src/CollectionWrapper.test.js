@@ -381,6 +381,12 @@ describe("CollectionWrapper", () => {
 				end
 			});
 			expect(wrapper.map(m => m.fruit)).toEqual(expected);
+			// Test iterator
+			let list = [];
+			for (let item of wrapper) {
+				list.push(item.fruit);
+			}
+			expect(list).toEqual(expected);
 		});
 	});
 
