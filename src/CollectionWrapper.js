@@ -1,4 +1,4 @@
-import { eventBus } from 'modapp';
+import eventBus from 'modapp-eventbus';
 import { array, obj } from 'modapp-utils';
 
 /**
@@ -21,6 +21,7 @@ class CollectionWrapper {
 	 * @param {function} [opt.compare] Sort compare function.
 	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'collectionWrapper'.
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
+	 * @param {?number} [opt.autoDispose] Milliseconds until dispose is called after the number of listeners reaches zero. Default is never.
 	 */
 	constructor(collection, opt = {}) {
 		this._collection = collection;
@@ -32,7 +33,8 @@ class CollectionWrapper {
 			end: { type: '?number', property: '_end' },
 			compare: { type: '?function', property: '_compare' },
 			namespace: { type: 'string', default: 'collectionWrapper', property: '_namespace' },
-			eventBus: { type: 'object', default: eventBus, property: '_eventBus' }
+			eventBus: { type: 'object', default: eventBus, property: '_eventBus' },
+			autoDispose: { type: '?number', property: '_autoDispose' }
 		});
 
 		if (this._map) {
@@ -46,8 +48,12 @@ class CollectionWrapper {
 			this._onChange = this._onChange.bind(this);
 		}
 
+		this._onCount = 0;
+		this._timeout = null;
+
 		this._initList();
 		this._setEventListeners(true);
+		this._checkAutoDispose(0);
 	}
 
 	_initList() {
@@ -135,6 +141,7 @@ class CollectionWrapper {
 	 * @param {Event~eventCallback} handler A function to execute when the event is emitted.
 	 */
 	on(events, handler) {
+		this._checkAutoDispose(1);
 		this._eventBus.on(this, events, handler, this._namespace);
 	}
 
@@ -144,6 +151,7 @@ class CollectionWrapper {
 	 * @param {Event~eventCallback} [handler] An option handler function. The handler will only be remove if it is the same handler.
 	 */
 	off(events, handler) {
+		this._checkAutoDispose(-1);
 		this._eventBus.off(this, events, handler, this._namespace);
 	}
 
@@ -277,17 +285,13 @@ class CollectionWrapper {
 	}
 
 	_setEventListeners(on) {
-		if (!this._collection.on) {
+		let c = this._collection;
+		if (typeof c.on !== 'function') {
 			return;
 		}
-
-		if (on) {
-			this._collection.on('add', this._onAdd);
-			this._collection.on('remove', this._onRemove);
-		} else {
-			this._collection.off('add', this._onAdd);
-			this._collection.off('remove', this._onRemove);
-		}
+		let cb = on ? 'on' : 'off';
+		c[cb]('add', this._onAdd);
+		c[cb]('remove', this._onRemove);
 	}
 
 	_binarySearch(m) {
@@ -491,9 +495,33 @@ class CollectionWrapper {
 		this._trySendRemove(m, fidx);
 	}
 
+	_checkAutoDispose(dt) {
+		let ms = this._autoDispose;
+		if (ms === null) {
+			return;
+		}
+		this._onCount += dt;
+		if (this._onCount > 0) {
+			if (this._timeout) {
+				clearTimeout(this._timeout);
+				this._timeout = null;
+			}
+		} else {
+			this._timeout = setTimeout(() => this.dispose(), ms);
+		}
+	}
+
 	dispose() {
 		if (!this._collection) {
 			return;
+		}
+
+		if (this._filter) {
+			for (let item of this._collection) {
+				if (item.on) {
+					item.off('change', this._onChange);
+				}
+			}
 		}
 
 		this._setEventListeners(false);
@@ -501,25 +529,33 @@ class CollectionWrapper {
 		delete this._weakMap;
 	}
 
-
 	[Symbol.iterator]() {
 		let i = 0;
 		let a;
 		let arr = this._list;
-		let len = this._list.length;
 		let done = { done: true };
+		let s = this._beginIdx();
+		let e = this._endIdx();
+		let si = 0;
+
+		if (e <= s) {
+			return { next: function() { return done; } };
+		}
 
 		if (this._filter) {
 			return {
 				next: function() {
-					while (i < len) {
+					while (si < e) {
 						a = arr[i];
 						i++;
 						if (a.f) {
-							return {
-								value: a.m,
-								done: false
-							};
+							si++;
+							if (si > s) {
+								return {
+									value: a.m,
+									done: false
+								};
+							}
 						}
 					}
 
@@ -528,9 +564,10 @@ class CollectionWrapper {
 			};
 		}
 
+		i = s;
 		return {
 			next: function () {
-				return i < len
+				return i < e
 					? { value: arr[i++].m, done: false }
 					: done;
 			}

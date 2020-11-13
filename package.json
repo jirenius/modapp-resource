@@ -33,22 +33,21 @@
   "license": "MIT",
   "homepage": "https://github.com/jirenius/modapp-resource",
   "devDependencies": {
-    "@babel/cli": "^7.8.4",
-    "@babel/core": "^7.9.0",
-    "@babel/preset-env": "^7.9.0",
-    "@rollup/plugin-commonjs": "^11.0.2",
-    "@rollup/plugin-node-resolve": "^7.1.1",
-    "babel-jest": "^25.2.6",
+    "@babel/cli": "^7.12.1",
+    "@babel/core": "^7.12.3",
+    "@babel/preset-env": "^7.12.1",
+    "@rollup/plugin-babel": "^5.2.1",
+    "@rollup/plugin-node-resolve": "^7.1.3",
+    "babel-jest": "^25.5.1",
+    "cross-env": "^7.0.2",
     "eslint": "^4.19.1",
-    "jest": "^25.2.7",
-    "rimraf": "^2.6.2",
-    "rollup": "^2.3.3",
-    "rollup-plugin-babel": "^4.4.0",
-    "rollup-plugin-terser": "^5.3.0"
+    "jest": "^25.5.4",
+    "rimraf": "^3.0.2",
+    "rollup": "^2.33.1",
+    "rollup-plugin-terser": "^6.1.0"
   },
   "dependencies": {
-    "cross-env": "^7.0.2",
-    "modapp": "^2.3.2",
-    "modapp-utils": "^1.2.1"
+    "modapp-eventbus": "^1.7.0",
+    "modapp-utils": "^1.7.0"
   }
 }

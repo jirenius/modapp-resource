@@ -1,4 +1,4 @@
-import { eventBus } from 'modapp';
+import eventBus from 'modapp-eventbus';
 import { obj } from 'modapp-utils';
 
 /**
@@ -20,9 +20,18 @@ class Model {
 		this._namespace = opt.namespace || 'model';
 		this._eventBus = opt.eventBus || eventBus;
 
+		this._props = {};
 		if (opt.data) {
 			this._update(opt.data, false);
 		}
+	}
+
+	/**
+	 * Model properties.
+	 * @returns {object} Anonymous object with all model properties.
+	 */
+	get props() {
+		return this._props;
 	}
 
 	/**
@@ -54,6 +63,16 @@ class Model {
 	}
 
 	/**
+	 * Resets all model properties to the given props. If any property where
+	 * changed or is missing, this will trigger a change event.
+	 * @param {object} props Properties to reset the model to.
+	 * @returns {Promise} Promise to the setting of the properties.
+	 */
+	reset(props) {
+		return Promise.resolve(this._update(props, true, true));
+	}
+
+	/**
 	 * Returns the model definition, or null if none is set.
 	 * @returns {?object} Object definition
 	 */
@@ -65,32 +84,53 @@ class Model {
 	 * Updates the properties.
 	 * @param {object} props Properties to update.
 	 * @param {boolean} emit Flag if changes though be emitted on the eventBus.
+	 * @param {boolean} reset Flag that sets if missing values should be deleted.
 	 * @returns {?object} Key/value object with the change properties and old values, or null if there were no changes.
 	 * @private
 	 */
-	_update(props, emit) {
+	_update(props, emit, reset) {
 		if (!props) {
 			return null;
 		}
 
 		let changed = null;
+		let v, promote;
+		let p = this._props;
+
+		if (reset) {
+			props = Object.assign({}, props);
+			for (var k in p) {
+				if (!props.hasOwnProperty(k)) {
+					props[k] = undefined;
+				}
+			}
+		}
+
 		if (this._definition) {
-			changed = obj.update(this, props, this._definition);
+			changed = obj.update(p, props, this._definition);
+			for (let key in changed) {
+				if ((this.hasOwnProperty(key) || !this[key]) && key[0] !== '_') {
+					v = p[key];
+					if (v === undefined) {
+						delete this[key];
+					} else {
+						this[key] = v;
+					}
+				}
+			}
 		} else {
 			for (let key in props) {
-				if (key &&
-					props.hasOwnProperty(key) &&
-					key.substr(0, 1) !== '_' &&
-					(this.hasOwnProperty(key) || !this[key])
-				) {
-					if (props[key] !== this[key]) {
-						changed = changed || {};
-						changed[key] = this[key];
-						if (props[key] === undefined) {
-							delete this[key];
-						} else {
-							this[key] = props[key];
-						}
+				v = props[key];
+				promote = (this.hasOwnProperty(key) || !this[key]) && key[0] !== '_';
+				if (p[key] !== v) {
+					changed = changed || {};
+					changed[key] = p[key];
+					if (v === undefined) {
+						delete p[key];
+						if (promote) delete this[key];
+					} else {
+						p[key] = v;
+						if (promote) this[key] = v;
 					}
 				}
 			}
