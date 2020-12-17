@@ -141,6 +141,10 @@ class Collection {
 		return this._map.length;
 	}
 
+	toArray() {
+		return this._map.slice();
+	}
+
 	_addItem(item, emit, idx) {
 		if (this._modelFactory) {
 			item = this._modelFactory(item);
