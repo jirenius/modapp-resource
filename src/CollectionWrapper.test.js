@@ -1,6 +1,7 @@
 import Model from './Model';
-import ModelCollection from './Collection';
+import Collection from './Collection';
 import CollectionWrapper from './CollectionWrapper';
+import eventBus from 'modapp-eventbus';
 
 describe("CollectionWrapper", () => {
 	let items;
@@ -9,12 +10,31 @@ describe("CollectionWrapper", () => {
 	let idx;
 	let getIdx;
 	let recordedEvents;
+	let recorderAttached;
 	var eventRecorder = (event) => jest.fn(e => recordedEvents.push(Object.assign(e, { event })));
 
 	jest.useFakeTimers();
 
+	function attachRecorder() {
+		if (!recorderAttached && wrapper) {
+			recorderAttached = { add: eventRecorder("add"), remove: eventRecorder("remove") };
+			wrapper.on('add', recorderAttached.add);
+			wrapper.on('remove', recorderAttached.remove);
+		}
+	}
+
+	function detachRecorder() {
+		if (recorderAttached) {
+			wrapper.off('add', recorderAttached.add);
+			wrapper.off('remove', recorderAttached.remove);
+			recorderAttached = null;
+		}
+	}
 
 	beforeEach(() => {
+		// Clear eventbus listeners
+		eventBus._evs = {};
+
 		items = {
 			10: { id: 10, fruit: 'banana' },
 			20: { id: 20, fruit: 'pineapple' },
@@ -22,7 +42,7 @@ describe("CollectionWrapper", () => {
 			40:	{ id: 40, fruit: 'apple' },
 			50:	{ id: 50, fruit: 'kiwi' }
 		};
-		collection = new ModelCollection({
+		collection = new Collection({
 			modelFactory: item => new Model({ data: item }),
 			data: [
 				items[10],
@@ -38,10 +58,13 @@ describe("CollectionWrapper", () => {
 	});
 
 	afterEach(() => {
+		detachRecorder();
 		if (wrapper) {
 			wrapper.dispose();
 			wrapper = null;
 		}
+		// Validate we dont have any undisposed listeners
+		expect(Object.keys(eventBus._evs)).toEqual([]);
 	});
 
 	describe("map", () => {
@@ -61,6 +84,7 @@ describe("CollectionWrapper", () => {
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'pineapple', 'orange', 'apple', 'passionfruit' ]);
 			expect(onAdd).toHaveBeenCalledTimes(1);
 			expect(onAdd.mock.calls[0][0]).toMatchObject({ idx: 4, item: passionfruit });
+			wrapper.off('add', onAdd);
 		});
 
 		it("removes model from collection", () => {
@@ -70,6 +94,7 @@ describe("CollectionWrapper", () => {
 			jest.runAllTimers();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple' ]);
 			expect(idx).toBe(1);
+			wrapper.off('remove', getIdx);
 		});
 	});
 
@@ -174,22 +199,64 @@ describe("CollectionWrapper", () => {
 			wrapper = new CollectionWrapper(collection, {
 				compare: (a, b) => a.fruit.localeCompare(b.fruit)
 			});
-			wrapper.on('add', getIdx);
+			attachRecorder();
 			collection.add({ id: 50, fruit: 'passionfruit' });
 			jest.runAllTimers();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'apple', 'banana', 'orange', 'passionfruit', 'pineapple' ]);
-			expect(idx).toBe(3);
+			expect(recordedEvents).toMatchObject([{ event: "add", idx: 3 }]);
 		});
 
 		it("removes model from sorted collection", () => {
 			wrapper = new CollectionWrapper(collection, {
 				compare: (a, b) => a.fruit.localeCompare(b.fruit)
 			});
-			wrapper.on('remove', getIdx);
+			attachRecorder();
 			collection.remove(10);
 			jest.runAllTimers();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'apple', 'orange', 'pineapple' ]);
-			expect(idx).toBe(1);
+			expect(recordedEvents).toMatchObject([{ event: "remove", idx: 1 }]);
+		});
+
+		it("moves model from sorted collection on model change affecting sorting", () => {
+			wrapper = new CollectionWrapper(collection, {
+				compare: (a, b) => a.fruit.localeCompare(b.fruit)
+			});
+			attachRecorder();
+			collection.get(10).set({ fruit: 'passionfruit' });
+			jest.runAllTimers();
+			expect(wrapper.map(m => m.fruit)).toEqual([ 'apple', 'orange', 'passionfruit', 'pineapple' ]);
+			expect(recordedEvents).toMatchObject([
+				{ event: 'remove', idx: 1 },
+				{ event: 'add', idx: 2 }
+			]);
+		});
+
+		it("emits no event from sorted collection on model change not affecting sorting", () => {
+			wrapper = new CollectionWrapper(collection, {
+				compare: (a, b) => a.fruit.localeCompare(b.fruit)
+			});
+			attachRecorder();
+			collection.get(10).set({ fruit: 'kiwi' });
+			jest.runAllTimers();
+			expect(wrapper.map(m => m.fruit)).toEqual([ 'apple', 'kiwi', 'orange', 'pineapple' ]);
+			expect(recordedEvents.length).toBe(0);
+		});
+
+		it("moves newly added model on model change affecting sorting", () => {
+			wrapper = new CollectionWrapper(collection, {
+				compare: (a, b) => a.fruit.localeCompare(b.fruit)
+			});
+			attachRecorder();
+			collection.add(items[50]);
+			jest.runAllTimers();
+			collection.get(50).set({ fruit: 'passionfruit' });
+			jest.runAllTimers();
+			expect(wrapper.map(m => m.fruit)).toEqual([ 'apple', 'banana', 'orange', 'passionfruit', 'pineapple' ]);
+			expect(recordedEvents).toMatchObject([
+				{ event: "add", idx: 2 },
+				{ event: "remove", idx: 2 },
+				{ event: "add", idx: 3 },
+			]);
 		});
 	});
 
@@ -205,57 +272,98 @@ describe("CollectionWrapper", () => {
 			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
-			wrapper.on('add', getIdx);
+			attachRecorder();
 			collection.add(items[50]);
 			jest.runAllTimers();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple', 'kiwi' ]);
-			expect(idx).toBe(3);
+			expect(recordedEvents).toMatchObject([{ event: "add", idx: 3 }]);
 		});
 
 		it("removes model from filtered collection", () => {
 			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
-			wrapper.on('remove', getIdx);
+			attachRecorder();
 			collection.remove(30);
 			jest.runAllTimers();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'apple' ]);
-			expect(idx).toBe(1);
+			expect(recordedEvents).toMatchObject([{ event: "remove", idx: 1 }]);
 		});
 
 		it("does not trigger event on adding filtered model to collection", () => {
 			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
-			wrapper.on('add', getIdx);
+			attachRecorder();
 			collection.add({ id: 50, fruit: 'passionfruit' });
 			jest.runAllTimers();
-			expect(getIdx).not.toBeCalled();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple' ]);
+			expect(recordedEvents.length).toBe(0);
 		});
 
 		it("does not trigger event on removing filtered model from collection", () => {
 			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
-			wrapper.on('remove', getIdx);
+			attachRecorder();
 			collection.remove(20);
 			jest.runAllTimers();
-			expect(getIdx).not.toBeCalled();
+			expect(recordedEvents.length).toBe(0);
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple' ]);
 		});
 
-		it("adds filtered model in on model change", () => {
+		it("adds filtered model on model change making filter true", () => {
 			wrapper = new CollectionWrapper(collection, {
 				filter: m => m.fruit.length <= 6
 			});
-			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple' ]);
-			wrapper.on('add', eventRecorder("add"));
+			attachRecorder();
 			let model = collection.get(20);
 			model.set({ fruit: 'kiwi' });
 			jest.runAllTimers();
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'kiwi', 'orange', 'apple' ]);
 			expect(recordedEvents).toMatchObject([{ event: "add", idx: 1 }]);
+		});
+
+		it("removes filtered model on model change making filter false", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			attachRecorder();
+			collection.get(10).set({ fruit: 'passionfruit' });
+			jest.runAllTimers();
+			expect(wrapper.map(m => m.fruit)).toEqual([ 'orange', 'apple' ]);
+			expect(recordedEvents).toMatchObject([{ event: "remove", idx: 0 }]);
+		});
+
+		it("removes newly added model on model change making filter false", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			attachRecorder();
+			collection.add(items[50]);
+			jest.runAllTimers();
+			collection.get(50).set({ fruit: 'passionfruit' });
+			jest.runAllTimers();
+			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple' ]);
+			expect(recordedEvents).toMatchObject([
+				{ event: "add", idx: 3 },
+				{ event: "remove", idx: 3 }
+			]);
+		});
+
+		it("adds newly added filtered model on model change making filter true", () => {
+			wrapper = new CollectionWrapper(collection, {
+				filter: m => m.fruit.length <= 6
+			});
+			attachRecorder();
+			collection.add({ id: 50, fruit: 'passionfruit' });
+			jest.runAllTimers();
+			collection.get(50).set({ fruit: 'kiwi' });
+			jest.runAllTimers();
+			expect(wrapper.map(m => m.fruit)).toEqual([ 'banana', 'orange', 'apple', 'kiwi' ]);
+			expect(recordedEvents).toMatchObject([
+				{ event: "add", idx: 3 }
+			]);
 		});
 	});
 
@@ -265,6 +373,38 @@ describe("CollectionWrapper", () => {
 				map: m => ({ id: m.id, fruit: m.fruit.toUpperCase() })
 			});
 			expect(wrapper.map(m => m.fruit)).toEqual([ 'BANANA', 'PINEAPPLE', 'ORANGE', 'APPLE' ]);
+		});
+
+		it("replaces mapped value on model change", () => {
+			wrapper = new CollectionWrapper(collection, {
+				map: m => m.fruit
+			});
+			attachRecorder();
+			let model = collection.get(20);
+			model.set({ fruit: 'kiwi' });
+			jest.runAllTimers();
+			expect(wrapper.toArray()).toEqual([ 'banana', 'kiwi', 'orange', 'apple' ]);
+			expect(recordedEvents).toMatchObject([
+				{ event: 'remove', idx: 1, item: 'pineapple' },
+				{ event: 'add', idx: 1, item: 'kiwi' }
+			]);
+		});
+
+		it("replaces mapped value on newly added model after model changed", () => {
+			wrapper = new CollectionWrapper(collection, {
+				map: m => m.fruit
+			});
+			attachRecorder();
+			collection.add({ id: 50, fruit: 'passionfruit' });
+			jest.runAllTimers();
+			collection.get(50).set({ fruit: 'kiwi' });
+			jest.runAllTimers();
+			expect(wrapper.toArray()).toEqual([ 'banana', 'pineapple', 'orange', 'apple', 'kiwi' ]);
+			expect(recordedEvents).toMatchObject([
+				{ event: 'add', idx: 4, item: 'passionfruit' },
+				{ event: 'remove', idx: 4, item: 'passionfruit' },
+				{ event: 'add', idx: 4, item: 'kiwi' }
+			]);
 		});
 	});
 
@@ -510,8 +650,7 @@ describe("CollectionWrapper", () => {
 				begin,
 				end
 			});
-			wrapper.on('add', eventRecorder('add'));
-			wrapper.on('remove', eventRecorder('remove'));
+			attachRecorder();
 			let arr = wrapper.toArray();
 			let kiwi = { id: 50, fruit: 'kiwi' };
 			collection.add(kiwi, idx);
@@ -666,8 +805,7 @@ describe("CollectionWrapper", () => {
 				begin,
 				end
 			});
-			wrapper.on('add', eventRecorder('add'));
-			wrapper.on('remove', eventRecorder('remove'));
+			attachRecorder();
 			let arr = wrapper.toArray();
 			collection.remove(collection.atIndex(idx).id);
 			jest.runAllTimers();
@@ -718,4 +856,5 @@ describe("CollectionWrapper", () => {
 			expect(arr.length).toBe(0);
 		});
 	});
+
 });
