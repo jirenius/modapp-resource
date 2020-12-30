@@ -1,5 +1,6 @@
 import eventBus from 'modapp-eventbus';
 import { array } from 'modapp-utils';
+import { getProps } from './utils';
 
 function compare(a, b) {
 	return a.key.localeCompare(b.key);
@@ -105,6 +106,9 @@ class ModelToCollection {
 	 * @returns {this}
 	 */
 	setModel(model, noEvents) {
+		model = model || null;
+		if (model === this._model) return this;
+
 		this._listen(false);
 		for (let i = this._list.length - 1; i >= 0; i--) {
 			let o = this._list[i];
@@ -126,8 +130,7 @@ class ModelToCollection {
 		}
 
 		// Iterate over props object if available, otherwise the model itself.
-		let p = this._model.props;
-		p = typeof p == 'object' && p !== null ? p : this._model;
+		let p = getProps(this._model);
 
 		for (let k in p) {
 			if (p.hasOwnProperty(k)) {
@@ -155,6 +158,30 @@ class ModelToCollection {
 		return this;
 	}
 
+	/**
+	 * Refresh scans through all items to ensure filtering and sorting is
+	 * correct.
+	 * @param {string} [key] Optional key of a single item to refresh.
+	 */
+	refresh(key) {
+		// Currently only filtering is supported.
+		// Later also sorting should be added.
+		if (!this._model) return;
+
+		let p = getProps(this._model);
+		if (key) {
+			if (p.hasOwnProperty(key)) {
+				this._onItemChange(key, p[key]);
+			}
+		} else {
+			for (let k in p) {
+				if (p.hasOwnProperty(k)) {
+					this._onItemChange(k, p[k]);
+				}
+			}
+		}
+	}
+
 	_listen(on) {
 		let cb = on ? 'on' : 'off';
 		if (this._model && this._model[cb]) {
@@ -165,7 +192,14 @@ class ModelToCollection {
 	_listenItem(o) {
 		let m = o.value;
 		if (typeof m === 'object' && m !== null && typeof m.on == 'function') {
-			o.cb = this._onItemChange.bind(this, o);
+			o.cb = () => {
+				// Ensure the model still has this property
+				let props = getProps(this._model);
+				let key = o.key;
+				if (props && props.hasOwnProperty(key)) {
+					this._onItemChange(key, o.value);
+				}
+			};
 			m.on('change', o.cb);
 		}
 	}
@@ -180,8 +214,7 @@ class ModelToCollection {
 	_onChange(change, m) {
 		if (m !== this._model) return;
 
-		let p = m.props;
-		p = typeof p == 'object' && p !== null ? p : m;
+		let p = getProps(m);
 
 		for (let k in change) {
 			let ov = change[k];
@@ -200,22 +233,22 @@ class ModelToCollection {
 		}
 	}
 
-
-	_onItemChange(o) {
-		let show = !this._filter || this._filter(o.key, o.value);
+	_onItemChange(k, v) {
+		let show = !this._filter || this._filter(k, v);
 		// Check if it is filtered
-		let fo = this._filtered && this._filtered[o.key];
-		if (fo) {
+		let o = this._filtered && this._filtered[k];
+		if (o) {
 			// Quick exit if it should be kept hidden
 			if (!show) return;
-			delete this._filtered[o.key];
+			delete this._filtered[k];
 		} else {
-			let idx = this._indexOfItem(o.key, o.value);
+			let idx = this._indexOfItem(k, v);
+			o = this._list[idx];
 			// Check if the change didn't affect the sorting
 			if (
 				show &&
 				(idx === 0 || this._compare(this._list[idx - 1], o) < 0) &&
-				(idx === (this._list.length - 1) || this._compare(o, this._list[idx + 1], o) < 0)
+				(idx === (this._list.length - 1) || this._compare(o, this._list[idx + 1]) < 0)
 			) {
 				return;
 			}
@@ -227,7 +260,7 @@ class ModelToCollection {
 			// Add item to new position
 			this._addAtIdx(o, this._insertIdx(o));
 		} else {
-			this._filtered[o.key] = o;
+			this._filtered[k] = o;
  		}
 	}
 

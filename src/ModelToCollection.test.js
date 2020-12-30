@@ -55,6 +55,20 @@ describe("ModelToCollection", () => {
 			collection = new ModelToCollection(model);
 			expect(collection.toArray().map(m => m.fruit)).toEqual([ 'banana', 'pineapple', 'orange', 'apple' ]);
 		});
+
+		it("returns array of collection items in correct order after item is removed and then modified", () => {
+			collection = new ModelToCollection(nestedModel, {
+				compare: (a, b) => a.value.fruit.localeCompare(b.value.fruit),
+				filter: (k, v) => !v.hidden
+			});
+
+			nestedModel.set({ 10: undefined });
+			models[10].set({ hidden: false });
+
+			jest.runAllTimers();
+
+			expect(collection.toArray().map(m => m.fruit)).toEqual([ 'apple', 'pineapple' ]);
+		});
 	});
 
 	describe("model change event", () => {
