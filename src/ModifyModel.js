@@ -96,7 +96,7 @@ class ModifyModel {
 	reset(prop) {
 		let o = {};
 		if (prop) {
-			if (this._modifications.hasOwnProperty[prop]) {
+			if (this._modification.hasOwnProperty[prop]) {
 				o[prop] = this._model[prop];
 			}
 		} else {
