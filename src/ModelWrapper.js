@@ -106,7 +106,12 @@ class ModelWrapper extends Model {
 
 	_prep(o, k, v) {
 		let isDefined = typeof v !== 'undefined';
-		let mk = (this._keyMap ? (isDefined && this._keyMap(k, v)) : k) || null;
+		let mk = this._keyMap
+			? isDefined && this._keyMap(k, v)
+			: k;
+		if (typeof mk != 'string') {
+			mk = null;
+		}
 		if (isDefined && mk && (!this._filter || this._filter(k, v))) {
 			if (this._map) {
 				v = this._map(k, v);
@@ -114,7 +119,7 @@ class ModelWrapper extends Model {
 			o[mk] = v;
 		} else {
 			// Ensure we don't overwrite a new value
-			if (mk && !o.hasOwnProperty(mk)) {
+			if (mk !== null && !o.hasOwnProperty(mk)) {
 				o[mk] = undefined;
 			}
 		}
