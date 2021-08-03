@@ -145,17 +145,15 @@ class Model {
 
 	toJSON() {
 		if (this._definition) {
-			return obj.copy(this, this._definition);
+			return obj.copy(this._props, this._definition);
 		}
 
 		let props = {};
-		for (let key in this) {
-			if (key &&
-				this.hasOwnProperty(key) &&
-				key.substr(0, 1) !== '_'
-			) {
-				props[key] = this[key];
-			}
+		let p = this.props;
+		let v;
+		for (let key in p) {
+			v = p[k];
+			props[key] = v && typeof v == 'object' && typeof v.toJSON == 'function' ? v.toJSON() : v;
 		}
 		return props;
 	}

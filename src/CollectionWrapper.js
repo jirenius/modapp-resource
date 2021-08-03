@@ -101,6 +101,14 @@ class CollectionWrapper {
 		return s > e ? 0 : e - s;
 	}
 
+	/**
+	 * Returns the wrapped collection.
+	 * @returns {object}
+	 */
+	getCollection() {
+		return this.collection;
+	}
+
 	toJSON() {
 		return this._array().map(m => m.toJSON ? m.toJSON() : m);
 	}
@@ -217,6 +225,16 @@ class CollectionWrapper {
 			}
 		}
 		return -1;
+	}
+
+	/**
+	 * Refreshes the collection in case sorting, filtering, or mapping has been
+	 * affected by changes.
+	 */
+	refresh() {
+		for (let item of this._collection) {
+			this._onChange(null, item);
+		}
 	}
 
 	_indexOf(item) {

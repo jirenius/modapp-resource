@@ -15,6 +15,7 @@ class ModelWrapper extends Model {
 	 * @param {object?} model Model object to wrap.
 	 * @param {object} [opt] Optional parameters.
 	 * @param {function} [opt.map] Model map callback. If not provided, item objects will be stored as is.
+	 * @param {function} [opt.keyMap] Key map callback. If not provided, original key will be used.
 	 * @param {function} [opt.filter] Model filter callback. Parameter is a item of the underlying model.
 	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'modelWrapper'.
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
@@ -23,19 +24,25 @@ class ModelWrapper extends Model {
 		super(Object.assign({ namespace: 'modelWrapper', eventBus: eventBus }));
 
 		this._map = opt.map || null;
+		this._keyMap = opt.keyMap || null;
 		this._filter = opt.filter || null;
 
 		// Bind callbacks
 		this._onChange = this._onChange.bind(this);
-		if (this._filter) {
-			this._filtered = {};
-		}
 
-		if (this._filter || this._map) {
-			this._cbs = {};
+		if (this._filter || this._map || this._keyMap) {
+			this._items = {};
 		}
 
 		this.setModel(model, true);
+	}
+
+	/**
+	 * Model properties.
+	 * @returns {object} Anonymous object with all model properties.
+	 */
+	get props() {
+		return this._props;
 	}
 
 	/**
@@ -70,7 +77,7 @@ class ModelWrapper extends Model {
 		if (model === this._model) return Promise.resolve({});
 
 		let om = this._model;
-		this._unlistenItems();
+		this._removeItems();
 		this._listen(false);
 		this._model = model || null;
 		this._listen(true);
@@ -82,13 +89,7 @@ class ModelWrapper extends Model {
 			for (let k in p) {
 				if (p.hasOwnProperty(k) && k.substr(0, 1) != '_') {
 					let v = p[k];
-					this._listenItem(k, v);
-					if (!this._filter || this._filter(k, v)) {
-						if (this._map) {
-							v = this._map(k, v);
-						}
-						o[k] = v;
-					}
+					this._prep(o, k, v);
 				}
 			}
 		}
@@ -103,33 +104,77 @@ class ModelWrapper extends Model {
 		}
 	}
 
-	_listenItem(k, v) {
-		if (!this._cbs) return;
-
-		// Unlisten to old value
-		this._unlistenItem(k);
-		if (typeof v === 'object' && v !== null && typeof v.on == 'function') {
-			let o = { key: k, value: v };
-			o.cb = () => {
-				// Ensure the model still has this property
-				let p = getProps(this._model);
-				let k = o.key;
-				if (p && p.hasOwnProperty(k)) {
-					this._onItemChange(k, o.value);
-				}
-			};
-			v.on('change', o.cb);
-			this._cbs[k] = o;
+	_prep(o, k, v) {
+		let isDefined = typeof v !== 'undefined';
+		let mk = (this._keyMap ? (isDefined && this._keyMap(k, v)) : k) || null;
+		if (isDefined && mk && (!this._filter || this._filter(k, v))) {
+			if (this._map) {
+				v = this._map(k, v);
+			}
+			o[mk] = v;
+		} else {
+			// Ensure we don't overwrite a new value
+			if (mk && !o.hasOwnProperty(mk)) {
+				o[mk] = undefined;
+			}
 		}
+
+		let c = this._upsertItem(k, v, mk);
+		if (c) {
+			// Check if value existed, but with a different mapped key
+			if (c.mkey !== mk) {
+				if (!o.hasOwnProperty(c.mkey)) {
+					o[c.mkey] = undefined;
+				}
+				c.mkey = mk;
+			}
+		}
+		return o;
 	}
 
-	_unlistenItem(k) {
-		// Unlisten to old value
-		let o = this._cbs[k];
-		if (o) {
-			o.value.off('change', o.cb);
+	_upsertItem(k, v, mk) {
+		if (!this._items) return;
+
+		// Check if item already exists.
+		let c = this._items[k];
+		if (c) {
+			if (c.value === v) {
+				return c;
+			}
+			// Unlisten to old value
+			this._removeItem(c);
 		}
-		delete this._cbs[k];
+
+		if (typeof v == 'undefined') {
+			return c;
+		}
+
+		c = { key: k, value: v, mkey: mk };
+		// Listen to model values
+		if (typeof v === 'object' && v !== null && typeof v.on == 'function') {
+			c.cb = () => {
+				// Ensure the model still has this property
+				let p = getProps(this._model);
+				let k = c.key;
+				if (p && p.hasOwnProperty(k)) {
+					this._onItemChange(c);
+				}
+			};
+			v.on('change', c.cb);
+		}
+		this._items[k] = c;
+		return c;
+	}
+
+	_removeItem(k) {
+		// Unlisten to old value
+		let c = this._items[k];
+		if (c) {
+			if (c.cb) {
+				c.value.off('change', c.cb);
+			}
+			delete this._items[k];
+		}
 	}
 
 	_onChange(change, m) {
@@ -138,43 +183,31 @@ class ModelWrapper extends Model {
 		let p = getProps(m);
 		let o = {};
 		for (let k in change) {
-			this._prep(o, p, k);
+			let v = p[k];
+			this._prep(o, k, v);
 		}
 
 		super.set(o);
 	}
 
-	_onItemChange(k, v) {
+	_onItemChange(c) {
 		let p = getProps(this._model);
-		if (!p || p[k] !== v) return;
+		// Ensure the item is still the same
+		if (!p || p[c.key] !== c.value) return;
 
-		let o = this._prep({}, p, k);
-		super.set(o);
+		super.set(this._prep({}, c.key, c.value));
 	}
 
-	_prep(o, p, k) {
-		let v = p[k];
-		this._listenItem(k, v);
-		if (typeof v !== 'undefined' && (!this._filter || this._filter(k, v))) {
-			if (this._map) {
-				v = this._map(k, v);
+	_removeItems() {
+		if (this._items) {
+			for (let k in this._items) {
+				this._removeItem(k);
 			}
-			o[k] = v;
-		} else {
-			o[k] = undefined;
-		}
-		return o;
-	}
-
-	_unlistenItems() {
-		if (!this._cbs) return;
-		for (let k in this._cbs) {
-			this._unlistenItem(k);
 		}
 	}
 
 	dispose() {
-		this._unlistenItems();
+		this._removeItems();
 		this._listen(false);
 		this._model = null;
 	}
