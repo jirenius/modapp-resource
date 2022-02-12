@@ -17,6 +17,7 @@ class ModelWrapper extends Model {
 	 * @param {function} [opt.map] Model map callback. If not provided, item objects will be stored as is.
 	 * @param {function} [opt.keyMap] Key map callback. If not provided, original key will be used.
 	 * @param {function} [opt.filter] Model filter callback. Parameter is a item of the underlying model.
+	 * @param {function} [opt.dispose] Dispose callback called when a mapped item removed.
 	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'modelWrapper'.
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 */
@@ -26,6 +27,7 @@ class ModelWrapper extends Model {
 		this._map = opt.map || null;
 		this._keyMap = opt.keyMap || null;
 		this._filter = opt.filter || null;
+		this._dispose = opt.dispose || null;
 
 		// Bind callbacks
 		this._onChange = this._onChange.bind(this);
@@ -177,6 +179,9 @@ class ModelWrapper extends Model {
 		if (c) {
 			if (c.cb) {
 				c.value.off('change', c.cb);
+			}
+			if (this._dispose) {
+				this._dispose(k, c.value);
 			}
 			delete this._items[k];
 		}

@@ -46,6 +46,7 @@ class ModifyModel {
 	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'modifyModel'.
 	 * @param {object} [opt.isModifiedProperty] Property used to flag if model is modified. Defaults to 'isModified'.
 	 * @param {object} [opt.props] Properties to set initially.
+	 * @param {function} [opt.onChange] Callback called whenever the underlying model has changed. function(this, change)
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 * @param {boolean} [opt.modifiedOnNew] [opt.modifiedOnNew] Flag telling if model is considered modified on new properties not existing on the wrapped model. Defaults to false.
 	 */
@@ -58,6 +59,7 @@ class ModifyModel {
 		this._definition = opt.definition || null;
 		this._modProp = opt.hasOwnProperty('isModifiedProperty') ? opt.isModifiedProperty : 'isModified';
 		this._modifiedOnNew = !!opt.modifiedOnNew;
+		this._onChange = opt.onChange || null;
 		this._props = {};
 
 		this._setIsModified(this._update(getProps(model)));
@@ -177,14 +179,8 @@ class ModifyModel {
 	}
 
 	_setEventListener(on) {
-		if (!this._model || !this._model.on) {
-			return;
-		}
-
-		if (on) {
-			this._model.on('change', this._onModelChange);
-		} else {
-			this._model.off('change', this._onModelChange);
+		if (this._model && this._model.on) {
+			this._model[on ? 'on' : 'off']('change', this._onModelChange);
 		}
 	}
 
@@ -206,6 +202,9 @@ class ModifyModel {
 		}
 
 		this.set(props);
+		if (this._onChange) {
+			this._onChange(this, changed);
+		}
 	}
 
 	/**

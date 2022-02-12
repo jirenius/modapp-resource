@@ -151,9 +151,9 @@ class Model {
 		let props = {};
 		let p = this.props;
 		let v;
-		for (let key in p) {
+		for (let k in p) {
 			v = p[k];
-			props[key] = v && typeof v == 'object' && typeof v.toJSON == 'function' ? v.toJSON() : v;
+			props[k] = v && typeof v == 'object' && typeof v.toJSON == 'function' ? v.toJSON() : v;
 		}
 		return props;
 	}
