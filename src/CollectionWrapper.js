@@ -312,8 +312,8 @@ class CollectionWrapper {
 
 	_wrapModel(m, item) {
 		return this._filter
-			? { m: m, f: this._filter(item) }
-			: { m: m };
+			? { m: m, f: this._filter(item), i: item }
+			: { m: m, i: item };
 	}
 
 	_setEventListeners(on) {
@@ -592,8 +592,9 @@ class CollectionWrapper {
 		}
 
 		if (this._listen) {
-			for (let item of this._collection) {
-				if (item.on) {
+			for (let cont of this._list) {
+				let item = cont.i;
+				if (item && item.on) {
 					item.off('change', this._onChange);
 				}
 			}
