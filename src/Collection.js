@@ -22,7 +22,7 @@ class Collection {
 		opt = obj.copy(opt, {
 			compare: { type: '?function' },
 			modelFactory: { type: '?function' },
-			idAttribute: { type: 'function', default: m => m.id },
+			idAttribute: { type: '?function', default: m => m.id },
 			data: { type: '?object' },
 			namespace: { type: 'string', default: 'collection' },
 			eventBus: { type: 'object', default: eventBus }
@@ -33,7 +33,7 @@ class Collection {
 		this._namespace = opt.namespace;
 		this._eventBus = opt.eventBus;
 
-		this._map = new SortedMap(opt.compare);
+		this._map = opt.idAttribute ? new SortedMap(opt.compare) : [];
 
 		// Populate map with initial data
 		if (opt.data) {
@@ -83,6 +83,9 @@ class Collection {
 	 * @returns {number} Order index of the item before removal. -1 if the item id doesn't exist
 	 */
 	remove(id) {
+		if (!this._idAttribute) {
+			throw new Error("No id attribute set.");
+		}
 		let item = this.get(id);
 		if (!item) return -1;
 
@@ -97,11 +100,36 @@ class Collection {
 	}
 
 	/**
+	 * Remove an item at a given index.
+	 * @param {*} idx Index value of the item to remove.
+	 * @returns {*} Removed item.
+	 */
+	removeAtIndex(idx) {
+		if (idx < 0 || idx >= this._map.length) {
+			throw new Error("Index out of bounds.");
+		}
+
+		let item = this._map[idx];
+		if (this._idAttribute) {
+			this._map.remove(this._idAttribute(item));
+		} else {
+			this._map.splice(idx, 1);
+		}
+
+		this._eventBus.emit(this, this._namespace + '.remove', { item: item, idx: idx });
+
+		return item;
+	}
+
+	/**
 	 * Get an item from the collection by id
 	 * @param {string} id Id of the item
 	 * @returns {*} Stored item. Undefined if key doesn't exist
 	 */
 	get(id) {
+		if (!this._idAttribute) {
+			throw new Error("No id attribute set.");
+		}
 		return this._map.get(id);
 	}
 
@@ -150,7 +178,16 @@ class Collection {
 			item = this._modelFactory(item);
 		}
 
-		idx = this._map.add(this._idAttribute(item), item, idx);
+		if (this._idAttribute) {
+			idx = this._map.add(this._idAttribute(item), item, idx);
+		} else {
+			if (typeof idx != 'number') {
+				idx = this._map.length;
+			} else if (idx < 0 || idx > this._map.length) {
+				throw new Error("Index out of bounds.");
+			}
+			this._map.splice(idx, 0, item);
+		}
 		if (emit) {
 			this._eventBus.emit(this, this._namespace + '.add', { item: item, idx: idx });
 		}

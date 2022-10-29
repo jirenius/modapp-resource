@@ -1,6 +1,6 @@
 import eventBus from 'modapp-eventbus';
 import { array } from 'modapp-utils';
-import { getProps } from './utils';
+import { getProps, patchDiff } from './utils';
 
 function compare(a, b) {
 	return a.key.localeCompare(b.key);
@@ -26,6 +26,7 @@ class ModelToCollection {
 		this._namespace = opt.namespace || 'modelToCollection';
 		this._eventBus = opt.eventBus || eventBus;
 		this._filter = opt.filter || null;
+		this._props = {};
 
 		// Bind callbacks
 		this._onChange = this._onChange.bind(this);
@@ -180,6 +181,7 @@ class ModelToCollection {
 				}
 			}
 		}
+		this._ensureSynchronized();
 	}
 
 	_listen(on) {
@@ -192,12 +194,13 @@ class ModelToCollection {
 	_listenItem(o) {
 		let m = o.value;
 		if (typeof m === 'object' && m !== null && typeof m.on == 'function') {
-			o.cb = () => {
+			o.cb = (m, change) => {
 				// Ensure the model still has this property
 				let props = getProps(this._model);
 				let key = o.key;
 				if (props && props.hasOwnProperty(key)) {
 					this._onItemChange(key, o.value);
+					this._ensureSynchronized();
 				}
 			};
 			m.on('change', o.cb);
@@ -233,6 +236,7 @@ class ModelToCollection {
 		}
 	}
 
+
 	_onItemChange(k, v) {
 		let show = !this._filter || this._filter(k, v);
 		// Check if it is filtered
@@ -262,6 +266,26 @@ class ModelToCollection {
 		} else {
 			this._filtered[k] = o;
  		}
+	}
+
+	_ensureSynchronized() {
+		if (!this.sortTimeout) {
+			this.sortTimeout = setTimeout(() => this._synchronize(), 0);
+		}
+	}
+
+	_synchronize() {
+		this.sortTimeout = null;
+		if (!this._model) {
+			return;
+		}
+
+		let newList = this._list.slice().sort(this._compare);
+		patchDiff(this._list.slice(), newList,
+			(v, n, idx) => this._addAtIdx(v, idx),
+			(v, m, idx) => this._removeAtIdx(idx)
+		);
+
 	}
 
 	_addItem(k, item) {

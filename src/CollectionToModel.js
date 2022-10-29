@@ -25,7 +25,8 @@ class CollectionToModel {
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 */
 	constructor(collection, keyCallback, opt = {}) {
-		this._collection = collection;
+		this._collection = null;
+		this._props = {};
 		this._keyCallback = keyCallback;
 
 		obj.update(this, opt, {
@@ -38,20 +39,7 @@ class CollectionToModel {
 		this._onAdd = this._onAddRemove.bind(this, true);
 		this._onRemove = this._onAddRemove.bind(this, false);
 
-		// Init props
-		this._props = {};
-		for (let v of this._collection) {
-			let k = this._keyCallback(v);
-			if (!this._props.hasOwnProperty(k)) {
-				let mv = this._map(v);
-				this._props[k] = mv;
-				if (this._promote(k)) {
-					this[k] = mv;
-				}
-			}
-		}
-
-		this._setEventListeners(true);
+		this.setCollection(collection, true);
 	}
 
 	/**
@@ -63,8 +51,60 @@ class CollectionToModel {
 	}
 
 	/**
+	 * Set wrapped collection.
+	 * @param {Collection|Array?} collection Collection to wrap.
+	 * @param {boolean} noEvents If true, no events should be emitted.
+	 * @returns {this}
+	 */
+	setCollection(collection, noEvents) {
+		collection = collection || null;
+		if (this._collection === collection) {
+			return;
+		}
+
+		this._setEventListeners(false);
+		this._collection = collection;
+
+		// Init props
+		let o = {};
+		for (let v of this._collection) {
+			let k = this._keyCallback(v);
+			o[k] = this._map(v);
+		}
+
+		let change = {};
+		for (let k in o) {
+			let mv = o[k];
+			if (mv !== this._props[k]) {
+				change[k] = this._props[k];
+				this._props[k] = mv;
+				if (this._promote(k)) {
+					this[k] = mv;
+				}
+			}
+		}
+		for (let k in this._props) {
+			if (!o.hasOwnProperty(k)) {
+				change[k] = this._props[k];
+				delete this._props[k];
+				if (this._promote(k)) {
+					delete this[k];
+				}
+			}
+		}
+
+		this._setEventListeners(true);
+
+		if (!noEvents) {
+			this._eventBus.emit(this, this._namespace + '.change', change);
+		}
+
+		return this;
+	}
+
+	/**
 	 * Get wrapped collection
-	 * @returns {object} Collection
+	 * @returns {Collection?} Collection
 	 */
 	getCollection() {
 		return this._collection;
@@ -89,7 +129,7 @@ class CollectionToModel {
 	}
 
 	_setEventListeners(on) {
-		if (!this._collection.on) {
+		if (!this._collection || !this._collection.on) {
 			return;
 		}
 
@@ -124,9 +164,7 @@ class CollectionToModel {
 			}
 		}
 
-		let changed = {};
-		changed[k] = ov;
-		this._eventBus.emit(this, this._namespace + '.change', changed);
+		this._eventBus.emit(this, this._namespace + '.change', { [k]: ov });
 	}
 
 	_promote(key) {
