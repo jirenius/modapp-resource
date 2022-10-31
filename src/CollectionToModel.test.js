@@ -1,5 +1,5 @@
 import Model from './Model';
-import ModelCollection from './Collection';
+import Collection from './Collection';
 import CollectionToModel from './CollectionToModel';
 
 describe("CollectionToModel", () => {
@@ -16,7 +16,7 @@ describe("CollectionToModel", () => {
 			30:	{ id: 30, fruit: 'orange' },
 			40:	{ id: 40, fruit: 'apple' }
 		};
-		collection = new ModelCollection({
+		collection = new Collection({
 			modelFactory: item => new Model({ data: item }),
 			data: [
 				items[10],
@@ -96,6 +96,63 @@ describe("CollectionToModel", () => {
 			});
 			expect(onChange).toHaveBeenCalledTimes(1);
 			expect(onChange.mock.calls[0][0]).toMatchObject({ 20: { id: 20, fruit: 'pineapple' }});
+
+			wrapper.off('change', onChange);
+		});
+
+		it("triggers change event on setCollection without previous collection", () => {
+			wrapper = new CollectionToModel(null, item => item.id);
+			let onChange = jest.fn();
+			wrapper.on('change', onChange);
+			wrapper.setCollection(collection);
+			jest.runAllTimers();
+
+			expect(wrapper.props).toMatchObject({
+				10: { id: 10, fruit: 'banana' },
+				20: { id: 20, fruit: 'pineapple' },
+				30:	{ id: 30, fruit: 'orange' },
+				40:	{ id: 40, fruit: 'apple' },
+			});
+			expect(onChange).toHaveBeenCalledTimes(1);
+			expect(onChange.mock.calls[0][0]).toMatchObject({
+				10: undefined,
+				20: undefined,
+				30: undefined,
+				40: undefined,
+			});
+
+			wrapper.off('change', onChange);
+		});
+
+		it("triggers change event on setCollection with previous collection", () => {
+			wrapper = new CollectionToModel(collection, item => item.id);
+			let onChange = jest.fn();
+			wrapper.on('change', onChange);
+			wrapper.setCollection(new Collection({
+				modelFactory: item => new Model({ data: item }),
+				data: [
+					items[20],
+					items[30],
+					items[40],
+					{ id: 50, fruit: 'kiwi' }
+				]
+			}));
+			jest.runAllTimers();
+
+			expect(wrapper.props).toMatchObject({
+				20: { id: 20, fruit: 'pineapple' },
+				30:	{ id: 30, fruit: 'orange' },
+				40:	{ id: 40, fruit: 'apple' },
+				50: { id: 50, fruit: 'kiwi' },
+			});
+			expect(onChange).toHaveBeenCalledTimes(1);
+			expect(onChange.mock.calls[0][0]).toMatchObject({
+				10: { id: 10, fruit: 'banana' },
+				20: { id: 20, fruit: 'pineapple' },
+				30:	{ id: 30, fruit: 'orange' },
+				40:	{ id: 40, fruit: 'apple' },
+				50: undefined,
+			});
 
 			wrapper.off('change', onChange);
 		});

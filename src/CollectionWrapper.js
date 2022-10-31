@@ -44,7 +44,8 @@ class CollectionWrapper {
 		// Bind callbacks
 		this._onAdd = this._onAdd.bind(this);
 		this._onRemove = this._onRemove.bind(this);
-		if (this._filter) {
+		this._listen = !!(this._filter || this._map || this._compare);
+		if (this._listen) {
 			this._onChange = this._onChange.bind(this);
 		}
 
@@ -69,9 +70,6 @@ class CollectionWrapper {
 			: item => item;
 		let add = this._filter
 			? (item, m) => {
-				if (item.on) {
-					item.on('change', this._onChange);
-				}
 				let c = this._wrapModel(m, item);
 				if (c.f) this._len++;
 				this._list.push(c);
@@ -83,6 +81,9 @@ class CollectionWrapper {
 
 		for (let item of this._collection) {
 			let m = getModel(item);
+			if (this._listen && item.on) {
+				item.on('change', this._onChange);
+			}
 			add(item, m);
 		}
 
@@ -98,6 +99,14 @@ class CollectionWrapper {
 		let s = this._beginIdx();
 		let e = this._endIdx();
 		return s > e ? 0 : e - s;
+	}
+
+	/**
+	 * Returns the wrapped collection.
+	 * @returns {object}
+	 */
+	getCollection() {
+		return this.collection;
 	}
 
 	toJSON() {
@@ -218,6 +227,29 @@ class CollectionWrapper {
 		return -1;
 	}
 
+	/**
+	 * Refreshes the collection in case sorting, filtering, or mapping has been
+	 * affected by changes.
+	 */
+	refresh() {
+		for (let item of this._collection) {
+			this._onChange(null, item);
+		}
+	}
+
+	_indexOf(item) {
+		if (this._filter) {
+			return this._fIndexOf(item);
+		}
+		for (let i = 0; i < this._list.length; i++) {
+			let c = this._list[i];
+			if (c.m === item) {
+				return { cont: c, idx: i, fidx: i };
+			}
+		}
+		return { cont: null, idx: -1, fidx: -1 };
+	}
+
 	_fIndexOf(item) {
 		let fi = 0;
 		for (let i = 0; i < this._list.length; i++) {
@@ -280,8 +312,8 @@ class CollectionWrapper {
 
 	_wrapModel(m, item) {
 		return this._filter
-			? { m: m, f: this._filter(item) }
-			: { m: m };
+			? { m: m, f: this._filter(item), i: item }
+			: { m: m, i: item };
 	}
 
 	_setEventListeners(on) {
@@ -303,27 +335,70 @@ class CollectionWrapper {
 			? this._weakMap.get(item)
 			: item;
 
-		// With a compare function, we could speed this up with
-		// a binary search, and fall back on using _fIndexOf.
-		// But to simplify, we just use _fIndexOf for now.
-		let { cont, fidx } = this._fIndexOf(m);
+		// Get current idx of the item.
+		let { cont, idx, fidx } = this._indexOf(m);
 		if (!cont) {
 			return;
 		}
 
-		let f = this._filter(item);
-		// Quick exit if filter didn't change
-		if (f === cont.f) {
+		// Get filtered and new filter value
+		let f = true;
+		let nf = true;
+		if (this._filter) {
+			f = cont.f;
+			nf = this._filter(item);
+			cont.f = nf;
+		}
+
+		// Get new mapped item
+		let nm = m;
+		if (this._map) {
+			nm = this._map(item, this._collection);
+			if (m !== nm) {
+				cont.m = nm;
+				this._weakMap.set(item, nm);
+			}
+		}
+
+		// Check if item moved
+		let nfidx = fidx;
+		let moved = this._compare && !(
+			(idx === 0 || this._compare(this._list[idx - 1].m, nm) < 0) &&
+			(idx === (this._list.length - 1) || this._compare(nm, this._list[idx + 1].m) < 0)
+		);
+		if (moved) {
+			// Remove from last position
+			this._list.splice(idx, 1);
+			idx = this._binarySearch(nm);
+			if (idx < 0) {
+				// If idx < 0, the value contains the bitwise compliment of where the
+				// item would fit.
+				idx = ~idx;
+			}
+			// Insert in new position
+			this._list.splice(idx, 0, cont);
+			nfidx = this._filter
+				? nf
+					? this._fIndexOf(m).fidx
+					: fidx
+				: idx;
+		}
+
+		// Early exit if visibility, mapped value, and index is unchanged.
+		if (f === nf && m === nm && fidx === nfidx) {
 			return;
 		}
 
-		cont.f = f;
+		// Remove unless it was previously hidden
 		if (f) {
-			this._len++;
-			this._trySendAdd(cont.m, fidx);
-		} else {
 			this._len--;
-			this._trySendRemove(cont.m, fidx);
+			this._trySendRemove(m, fidx);
+		}
+
+		// Add unless it is now hidden
+		if (nf) {
+			this._len++;
+			this._trySendAdd(nm, nfidx);
 		}
 	}
 
@@ -440,16 +515,15 @@ class CollectionWrapper {
 		let cont = this._wrapModel(m, e.item);
 		this._list.splice(idx, 0, cont);
 
-		if (this._filter) {
-			if (e.item.on) {
-				e.item.on('change', this._onChange);
-			}
+		if (this._listen && e.item.on) {
+			e.item.on('change', this._onChange);
+		}
 
+		if (this._filter) {
 			if (!cont.f) {
 				return;
 			}
-			let r = this._fIndexOf(m);
-			idx = r.fidx;
+			idx = this._fIndexOf(m).fidx;
 		}
 
 		this._len++;
@@ -475,10 +549,11 @@ class CollectionWrapper {
 		}
 
 		let fidx = idx;
+		if (this._listen && e.item.on) {
+			e.item.off('change', this._onChange);
+		}
+
 		if (this._filter) {
-			if (e.item.on) {
-				e.item.off('change', this._onChange);
-			}
 			// Quick exit if a filtered item was removed.
 			if (!cont.f) {
 				return this._list.splice(idx, 1);
@@ -516,9 +591,10 @@ class CollectionWrapper {
 			return;
 		}
 
-		if (this._filter) {
-			for (let item of this._collection) {
-				if (item.on) {
+		if (this._listen) {
+			for (let cont of this._list) {
+				let item = cont.i;
+				if (item && item.on) {
 					item.off('change', this._onChange);
 				}
 			}

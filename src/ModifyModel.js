@@ -1,6 +1,27 @@
 import eventBus from 'modapp-eventbus';
 import { obj } from 'modapp-utils';
 
+function hasProps(m) {
+	return m && m.props && typeof m.props == 'object' ? m.props : null;
+}
+
+function getProps(m) {
+	if (!m) {
+		return null;
+	}
+	let props = hasProps(m);
+	if (props) {
+		return props;
+	}
+	let o = {};
+	for (let k in m) {
+		if (k && m.hasOwnProperty(k) && k[0] !== '_') {
+			o[k] = m[k];
+		}
+	}
+	return o;
+}
+
 /**
  * ModifyModel wraps another object or a {@link module:modapp~Model}, and sets
  * its own properties to the match.
@@ -25,6 +46,7 @@ class ModifyModel {
 	 * @param {string} [opt.namespace] Event bus namespace. Defaults to 'modifyModel'.
 	 * @param {object} [opt.isModifiedProperty] Property used to flag if model is modified. Defaults to 'isModified'.
 	 * @param {object} [opt.props] Properties to set initially.
+	 * @param {function} [opt.onChange] Callback called whenever the underlying model has changed. function(this, change)
 	 * @param {module:modapp~EventBus} [opt.eventBus] Event bus.
 	 * @param {boolean} [opt.modifiedOnNew] [opt.modifiedOnNew] Flag telling if model is considered modified on new properties not existing on the wrapped model. Defaults to false.
 	 */
@@ -35,10 +57,12 @@ class ModifyModel {
 		this._eventBus = opt.eventBus || eventBus;
 		this._namespace = opt.namespace || 'modifyModel';
 		this._definition = opt.definition || null;
-		this._modProp = opt.isModifiedProperty || 'isModified';
+		this._modProp = opt.hasOwnProperty('isModifiedProperty') ? opt.isModifiedProperty : 'isModified';
 		this._modifiedOnNew = !!opt.modifiedOnNew;
+		this._onChange = opt.onChange || null;
+		this._props = {};
 
-		this._setIsModified(this._update(model));
+		this._setIsModified(this._update(getProps(model)));
 		if (opt.props) {
 			this._setIsModified(this._update(opt.props));
 		}
@@ -86,6 +110,10 @@ class ModifyModel {
 		return Promise.resolve(changed);
 	}
 
+	get props() {
+		return this._props;
+	}
+
 	/**
 	 * Resets a single or all model properties to the underlying model, clearing
 	 * any modifications. If any property where changed or is missing, this will
@@ -95,13 +123,14 @@ class ModifyModel {
 	 */
 	reset(prop) {
 		let o = {};
+		let m = hasProps(this._model) || this._model;
 		if (prop) {
-			if (this._modifications.hasOwnProperty[prop]) {
-				o[prop] = this._model[prop];
+			if (this._modification.hasOwnProperty(prop)) {
+				o[prop] = m[prop];
 			}
 		} else {
 			for (let k in this._modification) {
-				o[k] = this._model[k];
+				o[k] = m[k];
 			}
 		}
 		return this.set(o);
@@ -124,56 +153,58 @@ class ModifyModel {
 	_setIsModified(changed) {
 		if (changed) {
 			let v;
+			let m = hasProps(this._model) || this._model;
 			for (let k in changed) {
-				v = this._model[k];
-				if (this[k] === v || (!this._modifiedOnNew && typeof v == 'undefined')) {
+				v = m[k];
+				if (this._props[k] === v || (!this._modifiedOnNew && typeof v == 'undefined')) {
 					delete this._modification[k];
 				} else {
-					this._modification[k] = this[k];
+					this._modification[k] = this._props[k];
 				}
 			}
 		}
 
 		// Do we have any modifications
-		let newIsModified = Object.keys(this._modification).length > 0;
-		if (newIsModified !== this[this._modProp]) {
-			changed = changed || {};
-			changed[this._modProp] = !newIsModified;
-			this[this._modProp] = newIsModified;
+		if (this._modProp) {
+			let newIsModified = Object.keys(this._modification).length > 0;
+			if (newIsModified !== this._props[this._modProp]) {
+				changed = changed || {};
+				changed[this._modProp] = !newIsModified;
+				this._props[this._modProp] = newIsModified;
+				this[this._modProp] = newIsModified;
+			}
 		}
 
 		return changed;
 	}
 
 	_setEventListener(on) {
-		if (!this._model || !this._model.on) {
-			return;
-		}
-
-		if (on) {
-			this._model.on('change', this._onModelChange);
-		} else {
-			this._model.off('change', this._onModelChange);
+		if (this._model && this._model.on) {
+			this._model[on ? 'on' : 'off']('change', this._onModelChange);
 		}
 	}
 
 	_onModelChange(changed) {
 		if (!this._model) return;
 
-		let props, old;
+		let m = hasProps(this._model) || this._model;
+		let props;
 		for (let k in changed) {
-			old = changed[k];
-			if (this[k] === old) {
+			// If the value isn't modified
+			if (!this._modification.hasOwnProperty(k)) {
 				props = props || {};
-				props[k] = this._model[k];
+				props[k] = m[k];
 			} else {
-				if (this[k] === this._model[k]) {
+				if (this._props[k] === m[k]) {
 					delete this._modification[k];
 				}
 			}
 		}
 
 		this.set(props);
+		if (this._onChange) {
+			this._onChange(this, changed);
+		}
 	}
 
 	/**
@@ -188,23 +219,34 @@ class ModifyModel {
 		}
 
 		let changed = null;
+		let v, promote;
+		let p = this._props;
+
 		if (this._definition) {
-			changed = obj.update(this, props, this._definition);
+			changed = obj.update(p, props, this._definition);
+			for (let key in changed) {
+				if ((this.hasOwnProperty(key) || !this[key]) && key[0] !== '_') {
+					v = p[key];
+					if (v === undefined) {
+						delete this[key];
+					} else {
+						this[key] = v;
+					}
+				}
+			}
 		} else {
 			for (let key in props) {
-				if (key &&
-					props.hasOwnProperty(key) &&
-					key.substr(0, 1) !== '_' &&
-					(this.hasOwnProperty(key) || !this[key])
-				) {
-					if (props[key] !== this[key]) {
-						changed = changed || {};
-						changed[key] = this[key];
-						if (typeof props[key] == 'undefined') {
-							delete this[key];
-						} else {
-							this[key] = props[key];
-						}
+				v = props[key];
+				promote = (this.hasOwnProperty(key) || !this[key]) && key[0] !== '_';
+				if (p[key] !== v) {
+					changed = changed || {};
+					changed[key] = p[key];
+					if (v === undefined) {
+						delete p[key];
+						if (promote) delete this[key];
+					} else {
+						p[key] = v;
+						if (promote) this[key] = v;
 					}
 				}
 			}
@@ -215,17 +257,15 @@ class ModifyModel {
 
 	toJSON() {
 		if (this._definition) {
-			return obj.copy(this, this._definition);
+			return obj.copy(this._props, this._definition);
 		}
 
 		let props = {};
-		for (let key in this) {
-			if (key &&
-				this.hasOwnProperty(key) &&
-				key.substr(0, 1) !== '_'
-			) {
-				props[key] = this[key];
-			}
+		let p = this.props;
+		let v;
+		for (let key in p) {
+			v = p[k];
+			props[key] = v && typeof v == 'object' && typeof v.toJSON == 'function' ? v.toJSON() : v;
 		}
 		return props;
 	}
