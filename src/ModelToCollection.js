@@ -26,13 +26,13 @@ class ModelToCollection {
 		this._namespace = opt.namespace || 'modelToCollection';
 		this._eventBus = opt.eventBus || eventBus;
 		this._filter = opt.filter || null;
-		this._props = {};
 
 		// Bind callbacks
 		this._onChange = this._onChange.bind(this);
 
 		// Init list
 		this._list = [];
+		this._props = {};
 		if (this._filter) {
 			this._filtered = {};
 		}
@@ -110,53 +110,59 @@ class ModelToCollection {
 		model = model || null;
 		if (model === this._model) return this;
 
-		this._listen(false);
-		for (let i = this._list.length - 1; i >= 0; i--) {
-			let o = this._list[i];
-			this._unlistenItem(o);
-			if (!noEvents) {
-				this._eventBus.emit(this, this._namespace + '.remove', {
-					item: this._list[i].value,
-					idx: i
-				});
-			}
+		for (let k in this._props) {
+			this._unlistenItem(this._props[k]);
 		}
-		this._model = model || null;
+
+		this._listen(false);
+		this._model = model;
 		this._listen(true);
 
+		let oldList = this._list;
 		this._list = [];
-		// Quick exit if we have no mdoel
-		if (!this._model) {
-			return this;
+		this._props = {};
+		if (this._filter) {
+			this._filtered = {};
 		}
 
-		// Iterate over props object if available, otherwise the model itself.
-		let p = getProps(this._model);
+		if (this._model) {
+			// Iterate over props object if available, otherwise the model itself.
+			let p = getProps(this._model);
 
-		for (let k in p) {
-			if (p.hasOwnProperty(k)) {
-				let v = p[k];
-				let o = { key: k, value: v };
-				if (!this._filter || this._filter(k, v)) {
-					this._list.push(o);
-				} else {
-					this._filtered[k] = o;
+			for (let k in p) {
+				if (p.hasOwnProperty(k)) {
+					let v = p[k];
+					let o = { key: k, value: v };
+					if (!this._filter || this._filter(k, v)) {
+						this._list.push(o);
+					} else {
+						this._filtered[k] = o;
+					}
+					this._listenItem(o);
 				}
-				this._listenItem(o);
 			}
+
+			this._list.sort(this._compare);
 		}
 
-		this._list.sort(this._compare);
 		if (!noEvents) {
-			for (let i = 0; i < this._list.length; i++) {
-				this._eventBus.emit(this, this._namespace + '.add', {
-					item: this._list[i].value,
-					idx: i
-				});
-			}
+			this._sendSyncEvents(oldList, this._list);
 		}
 
 		return this;
+	}
+
+	_sendSyncEvents(oldList, newList) {
+		patchDiff(oldList, newList,
+			(o, n, idx) => this._eventBus.emit(this, this._namespace + '.add', {
+				item: o.value,
+				idx,
+			}),
+			(o, m, idx) => this._eventBus.emit(this, this._namespace + '.remove', {
+				item: o.value,
+				idx,
+			})
+		);
 	}
 
 	/**
@@ -165,23 +171,24 @@ class ModelToCollection {
 	 * @param {string} [key] Optional key of a single item to refresh.
 	 */
 	refresh(key) {
-		// Currently only filtering is supported.
-		// Later also sorting should be added.
 		if (!this._model) return;
 
-		let p = getProps(this._model);
+		// Start by sorting list, in case the compare is altered.
+		let oldList = this._list.slice();
+		this._list.sort(this._compare);
+
 		if (key) {
-			if (p.hasOwnProperty(key)) {
-				this._onItemChange(key, p[key]);
+			let o = this._props[key];
+			if (o) {
+				this._onItemChange(o);
 			}
 		} else {
-			for (let k in p) {
-				if (p.hasOwnProperty(k)) {
-					this._onItemChange(k, p[k]);
-				}
+			for (let k in this._props) {
+				this._onItemChange(this._props[k]);
 			}
 		}
-		this._ensureSynchronized();
+
+		this._sendSyncEvents(oldList, this._list);
 	}
 
 	_listen(on) {
@@ -192,16 +199,18 @@ class ModelToCollection {
 	}
 
 	_listenItem(o) {
+		this._props[o.key] = o;
 		let m = o.value;
 		if (typeof m === 'object' && m !== null && typeof m.on == 'function') {
 			o.cb = (m, change) => {
-				// Ensure the model still has this property
-				let props = getProps(this._model);
-				let key = o.key;
-				if (props && props.hasOwnProperty(key)) {
-					this._onItemChange(key, o.value);
-					this._ensureSynchronized();
+				if (this._props[o.key] != o) {
+					return;
 				}
+				let oldList = this._list.slice();
+				this._list.sort(this._compare);
+				this._onItemChange(o);
+
+				this._sendSyncEvents(oldList, this._list);
 			};
 			m.on('change', o.cb);
 		}
@@ -217,11 +226,15 @@ class ModelToCollection {
 	_onChange(change, m) {
 		if (m !== this._model) return;
 
+		let oldList = this._list.slice();
+		this._list.sort(this._compare);
+
 		let p = getProps(m);
 
 		for (let k in change) {
-			let ov = change[k];
 			let nv = p[k];
+			let o = this._props[k];
+			let ov = o ? o.value : undefined;
 
 			if (ov === nv) continue;
 
@@ -229,118 +242,72 @@ class ModelToCollection {
 			if (typeof ov == 'undefined') {
 				this._addItem(k, nv);
 			} else if (typeof nv == 'undefined') {
-				this._removeItem(k, ov);
+				this._removeItem(k);
 			} else {
-				this._updateItem(k, ov, nv);
+				this._removeItem(k);
+				this._addItem(k, nv);
 			}
 		}
+
+		this._sendSyncEvents(oldList, this._list);
 	}
 
 
-	_onItemChange(k, v) {
+	_onItemChange(o) {
+		let k = o.key;
+		let v = o.value;
 		let show = !this._filter || this._filter(k, v);
 		// Check if it is filtered
-		let o = this._filtered && this._filtered[k];
-		if (o) {
-			// Quick exit if it should be kept hidden
-			if (!show) return;
-			delete this._filtered[k];
-		} else {
-			let idx = this._indexOfItem(k, v);
-			o = this._list[idx];
-			// Check if the change didn't affect the sorting
-			if (
-				show &&
-				(idx === 0 || this._compare(this._list[idx - 1], o) < 0) &&
-				(idx === (this._list.length - 1) || this._compare(o, this._list[idx + 1]) < 0)
-			) {
-				return;
+		let f = this._filtered && this._filtered[k];
+		if (f) {
+			if (show) {
+				delete this._filtered[k];
+				this._list.splice(this._insertIdx(o), 0, o);
 			}
-			// Remove item from old position
-			this._removeAtIdx(idx);
-		}
-
-		if (show) {
-			// Add item to new position
-			this._addAtIdx(o, this._insertIdx(o));
 		} else {
-			this._filtered[k] = o;
- 		}
-	}
-
-	_ensureSynchronized() {
-		if (!this.sortTimeout) {
-			this.sortTimeout = setTimeout(() => this._synchronize(), 0);
+			if (!show) {
+				let idx = this._indexOfItem(o.key, v);
+				if (idx < 0) {
+					console.error("Item not in list: ", k, v);
+					return;
+				}
+				this._list.splice(idx, 1);
+				this._filtered[k] = o;
+			}
 		}
-	}
-
-	_synchronize() {
-		this.sortTimeout = null;
-		if (!this._model) {
-			return;
-		}
-
-		let newList = this._list.slice().sort(this._compare);
-		patchDiff(this._list.slice(), newList,
-			(v, n, idx) => this._addAtIdx(v, idx),
-			(v, m, idx) => this._removeAtIdx(idx)
-		);
-
 	}
 
 	_addItem(k, item) {
 		let o = { key: k, value: item };
 		this._listenItem(o);
 		if (!this._filter || this._filter(k, item)) {
-			this._addAtIdx(o, this._insertIdx(o));
+			this._list.splice(this._insertIdx(o), 0, o);
 		} else {
 			this._filtered[k] = o;
 		}
 	}
 
-	_removeItem(k, item) {
+	_removeItem(k) {
+		let o = this._props[k];
+		if (!o) {
+			console.error("Item key not found: ", k);
+			return;
+		}
+		delete this._props[k];
+		this._unlistenItem(o);
+
 		// Handle hidden item
-		let o = this._filtered && this._filtered[k];
-		if (o) {
-			this._unlistenItem(o);
+		if (this._filtered && this._filtered[k]) {
 			delete this._filtered[k];
 			return;
 		}
 		// Handle visible item
-		let idx = this._indexOfItem(k, item);
+		let idx = this._indexOfItem(k, o.value);
 		if (idx < 0) {
-			console.error("Item not in list: ", k, item);
+			console.error("Item not in list: ", k, o.value);
 			return;
 		}
-		o = this._list[idx];
-		this._unlistenItem(o);
-		this._removeAtIdx(idx);
-	}
-
-	_updateItem(k, oitem, item) {
-		let o = this._filtered && this._filtered[k];
-		if (o) {
-			this._unlistenItem(o);
-			delete this._filtered[k];
-		} else {
-			// Remove item from old position
-			let oidx = this._indexOfItem(k, oitem);
-			if (oidx < 0) {
-				console.error("Item key not in list: ", k);
-				return;
-			}
-			this._unlistenItem(this._list[oidx]);
-			this._removeAtIdx(oidx);
-		}
-
-		// Add item in new position
-		o = { key: k, value: item };
-		this._listenItem(o);
-		if (!this._filter || this._filter(k, item)) {
-			this._addAtIdx(o, this._insertIdx(o));
-		} else {
-			this._filtered[k] = o;
-		}
+		this._list.splice(idx, 1);
 	}
 
 	_insertIdx(o) {
@@ -366,33 +333,8 @@ class ModelToCollection {
 		return -1;
 	}
 
-	_removeAtIdx(idx) {
-		let o = this._list[idx];
-		this._list.splice(idx, 1);
-		this._eventBus.emit(this, this._namespace + '.remove', { item: o.value, idx });
-	}
-
-	_addAtIdx(o, idx) {
-		this._list.splice(idx, 0, o);
-		this._eventBus.emit(this, this._namespace + '.add', { item: o.value, idx });
-	}
-
 	dispose() {
-		if (!this._model) {
-			return;
-		}
-		for (let o of this._list) {
-			this._unlistenItem(o);
-		}
-		if (this._filtered) {
-			for (let k in this._filtered) {
-				this._unlistenItem(this._filtered[k]);
-			}
-			this._filtered = null;
-		}
-		this._list = [];
-		this._listen(false);
-		this._model = null;
+		this.setModel(null, true);
 	}
 
 	[Symbol.iterator]() {
