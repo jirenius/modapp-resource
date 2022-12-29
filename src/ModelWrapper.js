@@ -99,6 +99,34 @@ class ModelWrapper extends Model {
 		return Promise.resolve(super._update(o, !noEvents, !!om));
 	}
 
+	/**
+	 * Refreshes the model, or a single property of the model.
+	 * @param {string} [key] Optional key to refresh. All keys are refreshed if omitted.
+	 */
+	refresh(key) {
+		if (!this._model) return;
+
+		let p = getProps(this._model);
+		let o = {};
+		if (key) {
+			if (!p.hasOwnProperty(key)) {
+				return;
+			}
+			this._prep(o, key, p[key]);
+		} else {
+			for (let k in p) {
+				let v = p[k];
+				this._prep(o, k, v);
+			}
+			for (let k in this._props) {
+				if (!p.hasOwnProperty(k)) {
+					this._prep(o, k);
+				}
+			}
+		}
+		super.set(o);
+	}
+
 	_listen(on) {
 		let cb = on ? 'on' : 'off';
 		if (this._model && this._model[cb]) {
