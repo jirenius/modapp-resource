@@ -142,11 +142,12 @@ class ModelWrapper extends Model {
 		if (typeof mk != 'string') {
 			mk = null;
 		}
+		let mv = v;
 		if (isDefined && mk && (!this._filter || this._filter(k, v))) {
 			if (this._map) {
-				v = this._map(k, v);
+				mv = this._map(k, v);
 			}
-			o[mk] = v;
+			o[mk] = mv;
 		} else {
 			// Ensure we don't overwrite a new value
 			if (mk !== null && !o.hasOwnProperty(mk)) {
