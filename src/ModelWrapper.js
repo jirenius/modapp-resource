@@ -89,7 +89,7 @@ class ModelWrapper extends Model {
 		let o = {};
 		if (p) {
 			for (let k in p) {
-				if (p.hasOwnProperty(k) && k.substr(0, 1) != '_') {
+				if (p.hasOwnProperty(k) && k.slice(0, 1) != '_') {
 					let v = p[k];
 					this._prep(o, k, v);
 				}
@@ -143,9 +143,15 @@ class ModelWrapper extends Model {
 			mk = null;
 		}
 		let mv = v;
+		let c = this._items && this._items[k];
+
 		if (isDefined && mk && (!this._filter || this._filter(k, v))) {
 			if (this._map) {
-				mv = this._map(k, v);
+				// If we map to a disposable value, we do not create a new map
+				// value, but assume the disposable value will update itself.
+				mv = this._dispose && c && c.value === v
+					? c.mvalue
+					: this._map(k, v);
 			}
 			o[mk] = mv;
 		} else {
@@ -155,7 +161,7 @@ class ModelWrapper extends Model {
 			}
 		}
 
-		let c = this._upsertItem(k, v, mk);
+		c = this._upsertItem(c, k, v, mk, mv);
 		if (c) {
 			// Check if value existed, but with a different mapped key
 			if (c.mkey !== mk) {
@@ -168,11 +174,10 @@ class ModelWrapper extends Model {
 		return o;
 	}
 
-	_upsertItem(k, v, mk) {
+	_upsertItem(c, k, v, mk, mv) {
 		if (!this._items) return;
 
 		// Check if item already exists.
-		let c = this._items[k];
 		if (c) {
 			if (c.value === v) {
 				return c;
@@ -185,7 +190,7 @@ class ModelWrapper extends Model {
 			return c;
 		}
 
-		c = { key: k, value: v, mkey: mk };
+		c = { key: k, value: v, mkey: mk, mvalue: mv };
 		// Listen to model values
 		if (typeof v === 'object' && v !== null && typeof v.on == 'function') {
 			c.cb = () => {
