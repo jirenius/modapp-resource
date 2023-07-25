@@ -857,4 +857,127 @@ describe("CollectionWrapper", () => {
 		});
 	});
 
+	describe("setCollection", () => {
+		describe("emits remove and add events", () => {
+			test.each([
+				[ // No change
+					[ "foo", 42, true ],
+					[ "foo", 42, true ],
+					0,
+				],
+				[ // Remove last
+					[ "foo", 42, true ],
+					[ "foo", 42 ],
+					1,
+				],
+				[ // Remove mid
+					[ "foo", 42, true ],
+					[ "foo", true ],
+					1,
+				],
+				[ // Remove first
+					[ "foo", 42, true ],
+					[ 42, true ],
+					1,
+				],
+				[ // Add last
+					[ "foo", 42 ],
+					[ "foo", 42, true ],
+					1,
+				],
+				[ // Add mid
+					[ "foo", true ],
+					[ "foo", 42, true ],
+					1,
+				],
+				[ // Add first
+					[ 42, true ],
+					[ "foo", 42, true ],
+					1,
+				],
+				[ // Replace last
+					[ "foo", 42, true ],
+					[ "foo", 42, "bar" ],
+					2,
+				],
+				[ // Replace mid
+					[ "foo", 42, true ],
+					[ "foo", "bar", true ],
+					2,
+				],
+				[ // Replace first
+					[ "foo", 42, true ],
+					[ "bar", 42, true ],
+					2,
+				],
+			])("given firstCollection=%j, and secondCollection=%j gives changed values %j", (firstCollection, secondCollection, expectedEvents) => {
+				wrapper = new CollectionWrapper(firstCollection);
+				let arr = wrapper.toArray();
+				attachRecorder();
+				wrapper.setCollection(secondCollection);
+				jest.runAllTimers();
+				try {
+					expect(wrapper.toArray()).toEqual(secondCollection);
+					expect(recordedEvents.length).toBe(expectedEvents);
+					for (let e of recordedEvents) {
+						switch (e.event) {
+							case 'add':
+								expect(e.idx >= 0 && e.idx <= arr.length).toBe(true);
+								arr.splice(e.idx, 0, e.item);
+								break;
+							case 'remove':
+								expect(e.idx >= 0 && e.idx < arr.length).toBe(true);
+								expect(e.item).toBe(arr[e.idx]);
+								arr.splice(e.idx, 1);
+								break;
+						}
+					}
+					expect(arr).toEqual(secondCollection);
+				} catch (err) {
+					err.message = `${err.message}\n\nevents:\n\t${JSON.stringify(recordedEvents.map(e => ({ event: e.event, idx: e.idx, item: e.item })), null, 2)}`;
+					throw err;
+				}
+			});
+		});
+	});
+
+	// describe("setCollection", () => {
+	// 	test.each([
+	// 		// No slicing
+	// 		[ 0, null, 0, [ 'pineapple', 'orange', 'apple' ]],
+	// 		[ -3, -1, 4, [ 'orange', 'apple' ]],
+	// 	])("given opt.begin=%i, and opt.end=%p, with 'kiwi' added at idx=%i, mapped fruits equals %p", (begin, end, idx, expected) => {
+	// 		wrapper = new CollectionWrapper(collection, {
+	// 			begin,
+	// 			end
+	// 		});
+	// 		attachRecorder();
+	// 		let arr = wrapper.toArray();
+	// 		let kiwi = { id: 50, fruit: 'kiwi' };
+	// 		collection.add(kiwi, idx);
+	// 		jest.runAllTimers();
+	// 		try {
+	// 			expect(wrapper.map(m => m.fruit)).toEqual(expected);
+	// 			expect(wrapper.length).toEqual(expected.length);
+	// 			for (let e of recordedEvents) {
+	// 				switch (e.event) {
+	// 					case 'add':
+	// 						expect(e.idx >= 0 && e.idx <= arr.length).toBe(true);
+	// 						arr.splice(e.idx, 0, e.item);
+	// 						break;
+	// 					case 'remove':
+	// 						expect(e.idx >= 0 && e.idx < arr.length).toBe(true);
+	// 						expect(e.item.fruit).toBe(arr[e.idx].fruit);
+	// 						arr.splice(e.idx, 1);
+	// 						break;
+	// 				}
+	// 			}
+	// 			expect(arr.map(m => m.fruit)).toEqual(expected);
+	// 		} catch (err) {
+	// 			err.message = `${err.message}\n\nevents:\n\t${JSON.stringify(recordedEvents.map(e => ({ event: e.event, idx: e.idx, item: e.item })), null, 2)}`;
+	// 			throw err;
+	// 		}
+	// 	});
+	// });
+
 });

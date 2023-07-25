@@ -1,5 +1,6 @@
 import eventBus from 'modapp-eventbus';
 import { array, obj } from 'modapp-utils';
+import { toArray, patchDiff } from './utils';
 
 /**
  * A wrapper for a {@link module:modapp~Collection}, exposing the underlaying
@@ -24,7 +25,7 @@ class CollectionWrapper {
 	 * @param {?number} [opt.autoDispose] Milliseconds until dispose is called after the number of listeners reaches zero. Default is never.
 	 */
 	constructor(collection, opt = {}) {
-		this._collection = collection;
+		this._collection = collection || null;
 
 		obj.update(this, opt, {
 			map: { type: '?function', property: '_map' },
@@ -51,6 +52,7 @@ class CollectionWrapper {
 
 		this._onCount = 0;
 		this._timeout = null;
+		this._disposed = false;
 
 		this._initList();
 		this._setEventListeners(true);
@@ -60,6 +62,10 @@ class CollectionWrapper {
 	_initList() {
 		this._list = [];
 		this._len = 0;
+
+		if (!this._collection) {
+			return;
+		}
 
 		let getModel = this._map
 			? item => {
@@ -142,6 +148,31 @@ class CollectionWrapper {
 	 */
 	map(callback) {
 		return this._array().map(callback);
+	}
+
+	setCollection(collection) {
+		collection = collection || null;
+		if (this._collection === collection) {
+			return;
+		}
+
+		let oldList = toArray(this._collection);
+		let newList = toArray(collection);
+
+		this._setEventListeners(false);
+		this._collection = collection || null;
+		this._setEventListeners(true);
+
+		patchDiff(oldList, newList,
+			(item, n, idx) => this._onAdd({
+				item,
+				idx,
+			}),
+			(item, m, idx) => this._onRemove({
+				item,
+				idx,
+			})
+		);
 	}
 
 	/**
@@ -232,8 +263,10 @@ class CollectionWrapper {
 	 * affected by changes.
 	 */
 	refresh() {
-		for (let item of this._collection) {
-			this._onChange(null, item);
+		if (this._collection) {
+			for (let item of this._collection) {
+				this._onChange(null, item);
+			}
 		}
 	}
 
@@ -318,7 +351,7 @@ class CollectionWrapper {
 
 	_setEventListeners(on) {
 		let c = this._collection;
-		if (typeof c.on !== 'function') {
+		if (!c || typeof c.on !== 'function') {
 			return;
 		}
 		let cb = on ? 'on' : 'off';
@@ -491,7 +524,7 @@ class CollectionWrapper {
 	}
 
 	_onAdd(e) {
-		if (!this._collection) {
+		if (this._disposed) {
 			return;
 		}
 
@@ -531,7 +564,7 @@ class CollectionWrapper {
 	}
 
 	_onRemove(e) {
-		if (!this._collection) {
+		if (this._disposed) {
 			return;
 		}
 
@@ -587,7 +620,7 @@ class CollectionWrapper {
 	}
 
 	dispose() {
-		if (!this._collection) {
+		if (this._disposed) {
 			return;
 		}
 
@@ -603,6 +636,7 @@ class CollectionWrapper {
 		this._setEventListeners(false);
 		delete this._collection;
 		delete this._weakMap;
+		this.disposed = false;
 	}
 
 	[Symbol.iterator]() {

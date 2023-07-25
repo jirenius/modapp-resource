@@ -25,7 +25,7 @@ class JoinedCollection {
 
 		this._subs = [];
 
-		if (this._collection) {
+		if (this._collections) {
 			this._setListeners(true);
 			for (let c of this._collections) {
 				this._subs.push(this._addSubListeners(c));

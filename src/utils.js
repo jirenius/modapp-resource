@@ -9,6 +9,25 @@ export function getProps(m) {
 }
 
 /**
+ * Ensures the value is an array.
+ * @param {*} a Array, null, iterable, or object with a toArray function.
+ * @returns {Array} An array.
+ */
+export function toArray(a) {
+	if (!a) {
+		return [];
+	}
+	if (Array.isArray(a)) {
+		return a;
+	}
+	if (typeof a.toArray == 'function') {
+		return a.toArray();
+	}
+
+	return Array.from(a);
+}
+
+/**
  * Performs a LCS matric calculation
  * https://en.wikipedia.org/wiki/Longest_common_subsequence_problem
  * @param {Array} a Before array.
