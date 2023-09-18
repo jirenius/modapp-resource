@@ -264,7 +264,7 @@ class ModifyModel {
 		let p = this.props;
 		let v;
 		for (let key in p) {
-			v = p[k];
+			v = p[key];
 			props[key] = v && typeof v == 'object' && typeof v.toJSON == 'function' ? v.toJSON() : v;
 		}
 		return props;
