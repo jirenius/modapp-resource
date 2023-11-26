@@ -1,6 +1,6 @@
 {
   "name": "modapp-resource",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "description": "Utility classes implementing modapp's resource interfaces for Models and Collections.",
   "main": "lib/index.js",
   "module": "es/index.js",
