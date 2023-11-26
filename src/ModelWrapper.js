@@ -89,10 +89,8 @@ class ModelWrapper extends Model {
 		let o = {};
 		if (p) {
 			for (let k in p) {
-				if (p.hasOwnProperty(k) && k.slice(0, 1) != '_') {
-					let v = p[k];
-					this._prep(o, k, v);
-				}
+				let v = p[k];
+				this._prep(o, k, v);
 			}
 		}
 
@@ -183,7 +181,7 @@ class ModelWrapper extends Model {
 				return c;
 			}
 			// Unlisten to old value
-			this._removeItem(c);
+			this._removeItem(c.key);
 		}
 
 		if (typeof v == 'undefined') {
@@ -215,7 +213,7 @@ class ModelWrapper extends Model {
 				c.value.off('change', c.cb);
 			}
 			if (this._dispose) {
-				this._dispose(k, c.value);
+				this._dispose(k, c.mvalue);
 			}
 			delete this._items[k];
 		}

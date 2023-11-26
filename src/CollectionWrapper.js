@@ -130,7 +130,7 @@ class CollectionWrapper {
 	/**
 	 * Creates an array filled with all array elements that pass a test.
 	 *
-	 * Short hand for CollectionWrapper.toArray().map(filter).
+	 * Short hand for CollectionWrapper.toArray().filter(filter).
 	 * @param {function} filter Filter predicate function.
 	 * @returns {Array} A new array with the elements that pass the test.
 	 */
