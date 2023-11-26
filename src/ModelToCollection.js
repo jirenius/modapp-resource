@@ -130,16 +130,14 @@ class ModelToCollection {
 			let p = getProps(this._model);
 
 			for (let k in p) {
-				if (p.hasOwnProperty(k)) {
-					let v = p[k];
-					let o = { key: k, value: v };
-					if (!this._filter || this._filter(k, v)) {
-						this._list.push(o);
-					} else {
-						this._filtered[k] = o;
-					}
-					this._listenItem(o);
+				let v = p[k];
+				let o = { key: k, value: v };
+				if (!this._filter || this._filter(k, v)) {
+					this._list.push(o);
+				} else {
+					this._filtered[k] = o;
 				}
+				this._listenItem(o);
 			}
 
 			this._list.sort(this._compare);

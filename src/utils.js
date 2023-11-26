@@ -1,11 +1,23 @@
 /**
- * Get the props object of a model, or the model itself it if doesn't exist.
+ * Get the props object of a model, or a clone of the model with own properties
+ * not prefixed with underscore.
  * @param {*} m Model.
- * @returns {object} Model or props object.
+ * @returns {object} Model props object.
  */
 export function getProps(m) {
-	let p = m && m.props;
-	return typeof p == 'object' && p !== null ? p : m;
+	if (!m) {
+		return null;
+	}
+	let props = m && m.props;
+	if (!props || typeof props !== 'object') {
+		props = {};
+		for (let k in m) {
+			if (k && m.hasOwnProperty(k) && k[0] !== '_') {
+				props[k] = m[k];
+			}
+		}
+	}
+	return props;
 }
 
 /**
